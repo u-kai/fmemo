@@ -271,10 +271,49 @@ impl HtmlGenerator {
     <script>
         const ws = new WebSocket('ws://localhost:{}/ws');
         ws.onmessage = function(event) {{
-            if (event.data === 'reload') {{
+            const data = JSON.parse(event.data);
+            if (data.type === 'reload') {{
                 location.reload();
+            }} else if (data.type === 'update') {{
+                updateContent(data.html);
             }}
-        }};"#, port);
+        }};
+        
+        function updateContent(newHtml) {{
+            const newDoc = new DOMParser().parseFromString(newHtml, 'text/html');
+            const newBody = newDoc.body;
+            const currentBody = document.body;
+            
+            // Store current expand/collapse states
+            const expandedStates = new Map();
+            document.querySelectorAll('.children-container').forEach((container, index) => {{
+                expandedStates.set(index, container.classList.contains('expanded'));
+            }});
+            
+            // Replace body content
+            currentBody.innerHTML = newBody.innerHTML;
+            
+            // Restore expand/collapse states
+            document.querySelectorAll('.children-container').forEach((container, index) => {{
+                if (expandedStates.has(index)) {{
+                    const wasExpanded = expandedStates.get(index);
+                    if (wasExpanded) {{
+                        container.classList.remove('collapsed');
+                        container.classList.add('expanded');
+                        const header = container.previousElementSibling;
+                        if (header && header.classList.contains('memo-header')) {{
+                            const icon = header.querySelector('.expand-icon');
+                            if (icon) icon.classList.add('expanded');
+                        }}
+                    }} else {{
+                        container.classList.add('collapsed');
+                        container.classList.remove('expanded');
+                    }}
+                }} else {{
+                    container.classList.add('collapsed');
+                }}
+            }});
+        }}"#, port);
         
         html.push_str(r#"
         function toggleMemo(element) {
@@ -317,7 +356,7 @@ impl HtmlGenerator {
         html
     }
 
-    fn generate_memo(html: &mut String, memo: &FunctionMemo) {
+    pub fn generate_memo(html: &mut String, memo: &FunctionMemo) {
         let level_class = format!("level-{}", memo.level.min(8));
         let has_children = !memo.children.is_empty();
         let no_children_class = if has_children { "" } else { " no-children" };
@@ -442,8 +481,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
 
                         let clients = websocket_clients_clone.lock().unwrap();
+                        let update_msg = serde_json::json!({
+                            "type": "update",
+                            "html": format!("<body>{}</body>", 
+                                memos.iter()
+                                    .map(|memo| {
+                                        let mut memo_html = String::new();
+                                        HtmlGenerator::generate_memo(&mut memo_html, memo);
+                                        memo_html
+                                    })
+                                    .collect::<Vec<String>>()
+                                    .join("")
+                            )
+                        });
+                        
                         for client in clients.iter() {
-                            let _ = client.send(warp::ws::Message::text("reload"));
+                            let _ = client.send(warp::ws::Message::text(update_msg.to_string()));
                         }
                     }
                 }
