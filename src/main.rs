@@ -79,7 +79,8 @@ impl MarkdownParser {
                     children: Vec::new(),
                 });
                 current_content.clear();
-            } else if !line.trim().is_empty() {
+            } else {
+                // 空行も含めて全ての行を追加（Markdownの構造を保持）
                 current_content.push_str(line);
                 current_content.push('\n');
                 if let Some(ref mut memo) = current_memo {
@@ -167,6 +168,20 @@ impl HtmlGenerator {
         .memo-content {{
             padding: 15px 20px;
             line-height: 1.6;
+        }}
+        .memo-content p {{
+            margin: 0.5em 0;
+        }}
+        .memo-content ul {{
+            margin: 0.5em 0;
+            padding-left: 1.5em;
+        }}
+        .memo-content ul ul {{
+            margin: 0.2em 0;
+            padding-left: 1.2em;
+        }}
+        .memo-content li {{
+            margin: 0.2em 0;
         }}
         .memo-body {{
             padding: 0px 20px 20px 20px;
@@ -381,7 +396,7 @@ impl HtmlGenerator {
             html.push_str(&format!(
                 r#"<div class="memo-content">{}</div>
 "#,
-                Self::escape_html(&memo.content)
+                Self::markdown_to_html(&memo.content)
             ));
         }
 
@@ -418,6 +433,73 @@ impl HtmlGenerator {
             .replace('>', "&gt;")
             .replace('"', "&quot;")
             .replace('\'', "&#x27;")
+    }
+
+    fn markdown_to_html(text: &str) -> String {
+        let mut html = String::new();
+        let mut list_levels: Vec<usize> = Vec::new(); // インデントレベルを追跡
+        let mut current_paragraph = String::new();
+
+        for line in text.lines() {
+            let leading_spaces = line.len() - line.trim_start().len();
+            let trimmed = line.trim();
+            
+            if trimmed.starts_with("- ") {
+                // 段落があれば閉じる
+                if !current_paragraph.trim().is_empty() {
+                    html.push_str(&format!("<p>{}</p>\n", current_paragraph.trim()));
+                    current_paragraph.clear();
+                }
+
+                let current_level = leading_spaces;
+                
+                // リストレベルの調整
+                while !list_levels.is_empty() && list_levels.last().unwrap() >= &current_level {
+                    list_levels.pop();
+                    html.push_str("</ul>\n");
+                }
+                
+                if list_levels.is_empty() || list_levels.last().unwrap() < &current_level {
+                    list_levels.push(current_level);
+                    html.push_str("<ul>\n");
+                }
+                
+                let item_text = &trimmed[2..]; // "- " を除去
+                let indent = "  ".repeat(list_levels.len());
+                html.push_str(&format!("{}<li>{}</li>\n", indent, Self::escape_html(item_text)));
+            } else if trimmed.is_empty() {
+                // 空行の処理
+                while !list_levels.is_empty() {
+                    list_levels.pop();
+                    html.push_str("</ul>\n");
+                }
+                if !current_paragraph.trim().is_empty() {
+                    html.push_str(&format!("<p>{}</p>\n", current_paragraph.trim()));
+                    current_paragraph.clear();
+                }
+            } else {
+                // 通常のテキスト行
+                while !list_levels.is_empty() {
+                    list_levels.pop();
+                    html.push_str("</ul>\n");
+                }
+                if !current_paragraph.is_empty() {
+                    current_paragraph.push(' ');
+                }
+                current_paragraph.push_str(trimmed);
+            }
+        }
+
+        // 最後の処理
+        while !list_levels.is_empty() {
+            list_levels.pop();
+            html.push_str("</ul>\n");
+        }
+        if !current_paragraph.trim().is_empty() {
+            html.push_str(&format!("<p>{}</p>\n", current_paragraph.trim()));
+        }
+
+        html
     }
 }
 
