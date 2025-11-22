@@ -5,6 +5,7 @@ use std::thread;
 use warp::Filter;
 use futures_util::{SinkExt, StreamExt};
 use std::sync::{Arc, Mutex};
+use clap::{Arg, Command};
 
 #[derive(Debug, Clone)]
 struct FunctionMemo {
@@ -131,46 +132,46 @@ impl MarkdownParser {
 struct HtmlGenerator;
 
 impl HtmlGenerator {
-    fn generate(memos: &[FunctionMemo]) -> String {
-        let mut html = String::from(r#"
+    fn generate(memos: &[FunctionMemo], port: u16) -> String {
+        let mut html = format!(r#"
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Function Memo</title>
     <style>
-        body {
+        body {{
             font-family: monospace;
             margin: 20px;
             background-color: #f5f5f5;
             padding: 20px;
-        }
-        .memo-container {
+        }}
+        .memo-container {{
             border: 3px solid #333;
             margin: 15px;
             background-color: white;
             position: relative;
             border-radius: 8px;
             min-height: 60px;
-        }
-        .memo-header {
+        }}
+        .memo-header {{
             padding: 15px 20px 10px 20px;
             border-bottom: 1px solid #eee;
             background-color: #fafafa;
             border-radius: 5px 5px 0 0;
-        }
-        .memo-title {
+        }}
+        .memo-title {{
             font-weight: bold;
             margin: 0;
-        }
-        .memo-content {
+        }}
+        .memo-content {{
             padding: 15px 20px;
             line-height: 1.6;
-        }
-        .memo-body {
+        }}
+        .memo-body {{
             padding: 0px 20px 20px 20px;
-        }
-        .code-block {
+        }}
+        .code-block {{
             background-color: #f8f8f8;
             border: 1px solid #ddd;
             padding: 15px;
@@ -179,102 +180,103 @@ impl HtmlGenerator {
             overflow-x: auto;
             font-family: 'Courier New', monospace;
             font-size: 0.9em;
-        }
-        .code-block pre {
+        }}
+        .code-block pre {{
             margin: 0;
             white-space: pre-wrap;
-        }
-        .children-container {
+        }}
+        .children-container {{
             margin: 20px 15px 15px 15px;
-        }
+        }}
         
         /* Level-specific styling */
-        .level-1 {
+        .level-1 {{
             border-color: #e74c3c;
             border-width: 4px;
             font-size: 1.1em;
-        }
-        .level-1 .memo-title { font-size: 1.4em; }
+        }}
+        .level-1 .memo-title {{ font-size: 1.4em; }}
         
-        .level-2 {
+        .level-2 {{
             border-color: #3498db;
             border-width: 3px;
             font-size: 1.05em;
-        }
-        .level-2 .memo-title { font-size: 1.2em; }
+        }}
+        .level-2 .memo-title {{ font-size: 1.2em; }}
         
-        .level-3 {
+        .level-3 {{
             border-color: #2ecc71;
             border-width: 3px;
-        }
-        .level-3 .memo-title { font-size: 1.1em; }
+        }}
+        .level-3 .memo-title {{ font-size: 1.1em; }}
         
-        .level-4 {
+        .level-4 {{
             border-color: #f39c12;
             border-width: 2px;
             font-size: 0.95em;
-        }
-        .level-4 .memo-title { font-size: 1.05em; }
+        }}
+        .level-4 .memo-title {{ font-size: 1.05em; }}
         
-        .level-5 {
+        .level-5 {{
             border-color: #9b59b6;
             border-width: 2px;
             font-size: 0.9em;
-        }
-        .level-5 .memo-title { font-size: 1.0em; }
+        }}
+        .level-5 .memo-title {{ font-size: 1.0em; }}
         
         /* Deeper levels get smaller and more subtle */
-        .level-6, .level-7, .level-8 {
+        .level-6, .level-7, .level-8 {{
             border-color: #95a5a6;
             border-width: 1px;
             font-size: 0.85em;
-        }
+        }}
         
         /* Collapsible functionality */
-        .memo-header {
+        .memo-header {{
             cursor: pointer;
             user-select: none;
             transition: background-color 0.2s;
-        }
-        .memo-header:hover {
+        }}
+        .memo-header:hover {{
             background-color: #f0f0f0 !important;
-        }
-        .memo-title-container {
+        }}
+        .memo-title-container {{
             display: flex;
             align-items: center;
             gap: 8px;
-        }
-        .expand-icon {
+        }}
+        .expand-icon {{
             font-size: 0.8em;
             color: #666;
             transition: transform 0.3s;
             user-select: none;
-        }
-        .expand-icon.expanded {
+        }}
+        .expand-icon.expanded {{
             transform: rotate(90deg);
-        }
-        .children-container {
+        }}
+        .children-container {{
             overflow: hidden;
             transition: max-height 0.3s ease-out;
-        }
-        .children-container.collapsed {
+        }}
+        .children-container.collapsed {{
             max-height: 0;
-        }
-        .children-container.expanded {
+        }}
+        .children-container.expanded {{
             max-height: 10000px; /* Large enough to show content */
-        }
-        .no-children .expand-icon {
+        }}
+        .no-children .expand-icon {{
             visibility: hidden;
-        }
+        }}
     </style>
     <script>
-        const ws = new WebSocket('ws://localhost:3030/ws');
-        ws.onmessage = function(event) {
-            if (event.data === 'reload') {
+        const ws = new WebSocket('ws://localhost:{}/ws');
+        ws.onmessage = function(event) {{
+            if (event.data === 'reload') {{
                 location.reload();
-            }
-        };
+            }}
+        }};"#, port);
         
+        html.push_str(r#"
         function toggleMemo(element) {
             const container = element.parentElement;
             const childrenContainer = container.querySelector('.children-container');
@@ -382,24 +384,57 @@ impl HtmlGenerator {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let matches = Command::new("fmemo")
+        .version("0.1.0")
+        .about("Real-time Markdown memo viewer with hierarchical structure")
+        .arg(
+            Arg::new("file")
+                .short('f')
+                .long("file")
+                .value_name("FILE")
+                .help("Markdown file to watch")
+                .required(true)
+        )
+        .arg(
+            Arg::new("port")
+                .short('p')
+                .long("port")
+                .value_name("PORT")
+                .help("Port to serve on")
+                .default_value("3030")
+        )
+        .get_matches();
+
+    let file_path = matches.get_one::<String>("file").unwrap();
+    let port: u16 = matches.get_one::<String>("port").unwrap().parse()
+        .expect("Port must be a valid number");
+
+    // Check if file exists
+    if !std::path::Path::new(file_path).exists() {
+        eprintln!("Error: File '{}' does not exist", file_path);
+        std::process::exit(1);
+    }
+
     let html_content = Arc::new(Mutex::new(String::new()));
     let html_content_clone = Arc::clone(&html_content);
 
     let (tx, rx) = channel();
     let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())?;
-    watcher.watch(std::path::Path::new("."), RecursiveMode::Recursive)?;
+    watcher.watch(std::path::Path::new(file_path), RecursiveMode::NonRecursive)?;
 
     let websocket_clients: Arc<Mutex<Vec<tokio::sync::mpsc::UnboundedSender<warp::ws::Message>>>> = Arc::new(Mutex::new(Vec::new()));
     let websocket_clients_clone = Arc::clone(&websocket_clients);
 
+    let file_path_clone = file_path.clone();
+    let port_clone = port;
     thread::spawn(move || {
         loop {
             match rx.recv() {
                 Ok(_event) => {
-                    if let Ok(content) = fs::read_to_string("input.md") {
+                    if let Ok(content) = fs::read_to_string(&file_path_clone) {
                         let parser = MarkdownParser::new(content);
                         let memos = parser.parse();
-                        let html = HtmlGenerator::generate(&memos);
+                        let html = HtmlGenerator::generate(&memos, port_clone);
                         
                         {
                             let mut html_guard = html_content_clone.lock().unwrap();
@@ -417,10 +452,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    if let Ok(content) = fs::read_to_string("input.md") {
+    if let Ok(content) = fs::read_to_string(file_path) {
         let parser = MarkdownParser::new(content);
         let memos = parser.parse();
-        let html = HtmlGenerator::generate(&memos);
+        let html = HtmlGenerator::generate(&memos, port);
         *html_content.lock().unwrap() = html;
     }
 
@@ -469,11 +504,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let routes = html_route.or(websocket_route);
 
-    println!("Server running on http://localhost:3030");
-    println!("Create an 'input.md' file to see the live preview");
+    println!("Server running on http://localhost:{}", port);
+    println!("Watching file: {}", file_path);
     
     warp::serve(routes)
-        .run(([127, 0, 0, 1], 3030))
+        .run(([127, 0, 0, 1], port))
         .await;
 
     Ok(())
