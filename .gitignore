@@ -1,2 +1,17 @@
 /target
 .DS_Store
+
+# Development files
+*.log
+*.pid
+server.*
+
+# Test files
+test_*.md
+debug_*.md
+*_test.html
+*.html
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
