@@ -153,7 +153,9 @@ impl HtmlGenerator {
         #zoom-container {{
             transform-origin: 0 0;
             transition: transform 0.2s ease-out;
-            min-width: fit-content;
+            min-width: max-content;
+            min-height: max-content;
+            width: max-content;
             padding: 20px;
             position: absolute;
             top: 0;
@@ -194,15 +196,16 @@ impl HtmlGenerator {
             text-align: center;
         }}
         .memo-container {{
+            display: inline-block;
+            width: max-content;
             border: 3px solid #333;
             margin: 15px;
             background-color: white;
             position: relative;
             border-radius: 8px;
             min-height: 80px;
-            min-width: 300px;
-            resize: both;
-            overflow: auto;
+            min-width: 260px;
+            overflow: visible;
         }}
         .memo-header {{
             padding: 15px 20px 10px 20px;
@@ -320,13 +323,19 @@ impl HtmlGenerator {
         }}
         .children-container {{
             overflow: hidden;
-            transition: max-height 0.3s ease-out;
+            transition: max-height 0.3s ease-out, width 0.3s ease-out, margin 0.3s ease-out;
         }}
         .children-container.collapsed {{
             max-height: 0;
+            width: 0 !important;
+            min-width: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }}
         .children-container.expanded {{
             max-height: 10000px; /* Large enough to show content */
+            width: max-content;
+            margin: 20px 15px 15px 15px;
         }}
         .no-children .expand-icon {{
             visibility: hidden;
@@ -345,35 +354,31 @@ impl HtmlGenerator {
             min-width: max-content;
         }}
         .horizontal-layout .memo-container {{
-            flex: 0 0 auto;
-            min-width: 400px;
-            width: 500px;
+            display: inline-flex;
+            flex-direction: column;
+            width: max-content;
+            min-width: 280px;
         }}
-        .horizontal-layout .children-container {{
+        .horizontal-layout .children-container.expanded {{
             margin: 25px 20px 20px 20px;
-            width: auto;
+            width: max-content;
         }}
-        .horizontal-layout .children-container > .memo-container {{
-            margin: 20px 0;
-            width: 100%;
-            min-width: 400px;
+        .horizontal-layout .children-container.collapsed {{
+            width: 0 !important;
+            min-width: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }}
-        .horizontal-layout .children-container > .siblings-container {{
-            width: 100%;
-            min-width: max-content;
+        .horizontal-layout .siblings-container {{
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 25px;
+            align-items: flex-start;
+            width: max-content;
         }}
-        .horizontal-layout .children-container > .siblings-container > .memo-container {{
+        .horizontal-layout .siblings-container > .memo-container {{
             margin: 15px 0;
-            min-width: 400px;
-            width: 480px;
-        }}
-        .horizontal-layout .children-container .children-container > .siblings-container > .memo-container {{
-            min-width: 350px;
-            width: 420px;
-        }}
-        .horizontal-layout .children-container .children-container .children-container > .siblings-container > .memo-container {{
-            min-width: 300px;
-            width: 380px;
+            min-width: 260px;
         }}
         .code-language {{
             background-color: #ddd;
@@ -384,25 +389,6 @@ impl HtmlGenerator {
             font-weight: bold;
         }}
         
-        /* Resize handle styling */
-        .memo-container::-webkit-resizer {{
-            background: linear-gradient(135deg, transparent 40%, #999 40%, #999 60%, transparent 60%);
-            border-radius: 0 0 8px 0;
-        }}
-        
-        /* Better resize handle for all browsers */
-        .memo-container::after {{
-            content: '';
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            width: 20px;
-            height: 20px;
-            background: linear-gradient(135deg, transparent 40%, #666 40%, #666 45%, transparent 45%, transparent 55%, #666 55%, #666 60%, transparent 60%);
-            cursor: se-resize;
-            border-radius: 0 0 8px 0;
-            pointer-events: none;
-        }}
     </style>
     <script>
         const ws = new WebSocket('ws://localhost:{}/ws');
@@ -457,156 +443,18 @@ impl HtmlGenerator {
             const childrenContainer = container.querySelector('.children-container');
             const icon = element.querySelector('.expand-icon');
             
-            if (childrenContainer) {
-                const isExpanded = childrenContainer.classList.contains('expanded');
-                
-                if (isExpanded) {
-                    // Collapsing - restore original size if no manual resize
-                    childrenContainer.classList.remove('expanded');
-                    childrenContainer.classList.add('collapsed');
-                    icon.classList.remove('expanded');
-                    
-                    // Restore original size if it was auto-resized
-                    restoreOriginalSize(container);
-                } else {
-                    // Expanding - save original size first
-                    saveOriginalSize(container);
-                    
-                    childrenContainer.classList.remove('collapsed');
-                    childrenContainer.classList.add('expanded');
-                    icon.classList.add('expanded');
-                    
-                    // Auto-resize container when expanding children
-                    setTimeout(() => {
-                        autoResizeContainerRecursive(container);
-                    }, 300); // Wait for transition to complete
-                }
-            }
-        }
-        
-        function saveOriginalSize(container) {
-            // Only save if not already saved and not manually resized
-            if (!container.dataset.originalWidth && !container.dataset.originalHeight) {
-                const rect = container.getBoundingClientRect();
-                const computedStyle = window.getComputedStyle(container);
-                
-                // Save original dimensions
-                container.dataset.originalWidth = rect.width;
-                container.dataset.originalHeight = rect.height;
-                container.dataset.hadManualResize = container.style.width ? 'true' : 'false';
-            }
-        }
-        
-        function restoreOriginalSize(container) {
-            // Only restore if we have saved dimensions and it wasn't manually resized
-            if (container.dataset.originalWidth && container.dataset.originalHeight && 
-                container.dataset.hadManualResize === 'false') {
-                
-                // Check if no children are expanded
-                const expandedChildren = container.querySelectorAll('.children-container.expanded');
-                if (expandedChildren.length === 0) {
-                    container.style.width = container.dataset.originalWidth + 'px';
-                    container.style.height = container.dataset.originalHeight + 'px';
-                }
-            }
-        }
-        
-        function autoResizeContainerRecursive(container) {
-            // First resize this container
-            autoResizeContainer(container);
-            
-            // Then find parent containers and resize them too
-            let currentContainer = container;
-            while (currentContainer) {
-                // Find the parent memo container
-                let parentContainer = currentContainer.parentElement;
-                while (parentContainer && !parentContainer.classList.contains('memo-container')) {
-                    parentContainer = parentContainer.parentElement;
-                }
-                
-                if (parentContainer) {
-                    // Resize parent based on its children
-                    autoResizeContainer(parentContainer);
-                    currentContainer = parentContainer;
-                } else {
-                    break;
-                }
-            }
-        }
-        
-        function autoResizeContainer(container) {
-            // Check if container has been manually resized (has inline styles)
-            const hasManualWidth = container.style.width && container.style.width !== '';
-            const hasManualHeight = container.style.height && container.style.height !== '';
-            
-            // Get current container size
-            const containerRect = container.getBoundingClientRect();
-            let requiredWidth = 0;
-            let requiredHeight = 0;
-            
-            // Check if there are expanded children
-            const childrenContainer = container.querySelector('.children-container');
-            if (childrenContainer && childrenContainer.classList.contains('expanded')) {
-                const siblingsContainer = childrenContainer.querySelector('.siblings-container');
-                
-                if (siblingsContainer) {
-                    // Multiple siblings case
-                    const children = siblingsContainer.querySelectorAll(':scope > .memo-container');
-                    let totalChildWidth = 0;
-                    let maxChildHeight = 0;
-                    
-                    children.forEach(child => {
-                        const rect = child.getBoundingClientRect();
-                        totalChildWidth += rect.width;
-                        maxChildHeight = Math.max(maxChildHeight, rect.height);
-                    });
-                    
-                    // Calculate required width (children + gaps + margins)
-                    const gap = 25; // CSS gap
-                    const margin = 80; // Container margins (increased)
-                    const childrenWidth = totalChildWidth + (gap * (children.length - 1)) + margin;
-                    requiredWidth = Math.max(requiredWidth, childrenWidth);
-                    
-                    // Calculate required height (current + children + buffer)
-                    const headerHeight = 100; // Estimate for header and content
-                    const childrenHeight = maxChildHeight + headerHeight + 50; // Buffer
-                    requiredHeight = Math.max(requiredHeight, childrenHeight);
-                    
-                } else {
-                    // Single child case
-                    const child = childrenContainer.querySelector('.memo-container');
-                    if (child) {
-                        const childRect = child.getBoundingClientRect();
-                        requiredWidth = Math.max(requiredWidth, childRect.width + 120);
-                        requiredHeight = Math.max(requiredHeight, containerRect.height + childRect.height + 80);
-                    }
-                }
-                
-                // Only apply size if children actually need more space
-                if (requiredWidth > 0 && requiredHeight > 0) {
-                    const currentWidth = containerRect.width;
-                    const currentHeight = containerRect.height;
-                    
-                    // Width adjustment
-                    if (!hasManualWidth && requiredWidth > currentWidth) {
-                        container.style.width = requiredWidth + 'px';
-                    } else if (hasManualWidth && requiredWidth > currentWidth) {
-                        const manualWidth = parseInt(container.style.width);
-                        if (requiredWidth > manualWidth) {
-                            container.style.width = requiredWidth + 'px';
-                        }
-                    }
-                    
-                    // Height adjustment  
-                    if (!hasManualHeight && requiredHeight > currentHeight) {
-                        container.style.height = requiredHeight + 'px';
-                    } else if (hasManualHeight && requiredHeight > currentHeight) {
-                        const manualHeight = parseInt(container.style.height);
-                        if (requiredHeight > manualHeight) {
-                            container.style.height = requiredHeight + 'px';
-                        }
-                    }
-                }
+            if (!childrenContainer) return;
+
+            const isExpanded = childrenContainer.classList.contains('expanded');
+
+            if (isExpanded) {
+                childrenContainer.classList.remove('expanded');
+                childrenContainer.classList.add('collapsed');
+                icon.classList.remove('expanded');
+            } else {
+                childrenContainer.classList.remove('collapsed');
+                childrenContainer.classList.add('expanded');
+                icon.classList.add('expanded');
             }
         }
         
@@ -660,7 +508,10 @@ impl HtmlGenerator {
             applyZoom();
         }
         
-        // Mouse wheel zoom (only with Ctrl key)
+        // Track right mouse button state
+        let isRightMouseDown = false;
+        
+        // Mouse wheel zoom (Ctrl+scroll) and pan (right-click+scroll)
         document.addEventListener('wheel', function(e) {
             if (e.ctrlKey || e.metaKey) {
                 // Zoom mode
@@ -680,8 +531,38 @@ impl HtmlGenerator {
                 
                 currentZoom = newZoom;
                 applyZoom();
+            } else if (isRightMouseDown) {
+                // Pan mode with right mouse + scroll
+                e.preventDefault();
+                
+                const panSpeed = 2.0;
+                panX -= e.deltaX * panSpeed / currentZoom;
+                panY -= e.deltaY * panSpeed / currentZoom;
+                
+                applyZoom();
             }
-            // If no Ctrl key, allow normal scrolling
+            // If no modifier keys, allow normal scrolling
+        });
+        
+        // Track right mouse button for panning
+        document.addEventListener('mousedown', function(e) {
+            if (e.button === 2) { // Right mouse button
+                isRightMouseDown = true;
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('mouseup', function(e) {
+            if (e.button === 2) { // Right mouse button
+                isRightMouseDown = false;
+            }
+        });
+        
+        // Prevent context menu when right-clicking for panning
+        document.addEventListener('contextmenu', function(e) {
+            if (isRightMouseDown) {
+                e.preventDefault();
+            }
         });
         
         // Panning with mouse drag
