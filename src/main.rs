@@ -461,10 +461,17 @@ impl HtmlGenerator {
                 const isExpanded = childrenContainer.classList.contains('expanded');
                 
                 if (isExpanded) {
+                    // Collapsing - restore original size if no manual resize
                     childrenContainer.classList.remove('expanded');
                     childrenContainer.classList.add('collapsed');
                     icon.classList.remove('expanded');
+                    
+                    // Restore original size if it was auto-resized
+                    restoreOriginalSize(container);
                 } else {
+                    // Expanding - save original size first
+                    saveOriginalSize(container);
+                    
                     childrenContainer.classList.remove('collapsed');
                     childrenContainer.classList.add('expanded');
                     icon.classList.add('expanded');
@@ -473,6 +480,33 @@ impl HtmlGenerator {
                     setTimeout(() => {
                         autoResizeContainerRecursive(container);
                     }, 300); // Wait for transition to complete
+                }
+            }
+        }
+        
+        function saveOriginalSize(container) {
+            // Only save if not already saved and not manually resized
+            if (!container.dataset.originalWidth && !container.dataset.originalHeight) {
+                const rect = container.getBoundingClientRect();
+                const computedStyle = window.getComputedStyle(container);
+                
+                // Save original dimensions
+                container.dataset.originalWidth = rect.width;
+                container.dataset.originalHeight = rect.height;
+                container.dataset.hadManualResize = container.style.width ? 'true' : 'false';
+            }
+        }
+        
+        function restoreOriginalSize(container) {
+            // Only restore if we have saved dimensions and it wasn't manually resized
+            if (container.dataset.originalWidth && container.dataset.originalHeight && 
+                container.dataset.hadManualResize === 'false') {
+                
+                // Check if no children are expanded
+                const expandedChildren = container.querySelectorAll('.children-container.expanded');
+                if (expandedChildren.length === 0) {
+                    container.style.width = container.dataset.originalWidth + 'px';
+                    container.style.height = container.dataset.originalHeight + 'px';
                 }
             }
         }
@@ -505,10 +539,10 @@ impl HtmlGenerator {
             const hasManualWidth = container.style.width && container.style.width !== '';
             const hasManualHeight = container.style.height && container.style.height !== '';
             
-            // Always try to calculate required size based on all content
+            // Get current container size
             const containerRect = container.getBoundingClientRect();
-            let requiredWidth = containerRect.width;
-            let requiredHeight = containerRect.height;
+            let requiredWidth = 0;
+            let requiredHeight = 0;
             
             // Check if there are expanded children
             const childrenContainer = container.querySelector('.children-container');
@@ -548,24 +582,29 @@ impl HtmlGenerator {
                     }
                 }
                 
-                // Apply new size if needed, but respect manual resizing
-                if (!hasManualWidth && requiredWidth > containerRect.width) {
-                    container.style.width = requiredWidth + 'px';
-                } else if (hasManualWidth && requiredWidth > containerRect.width) {
-                    // If manually resized but children need more space, expand minimally
-                    const manualWidth = parseInt(container.style.width);
-                    if (requiredWidth > manualWidth) {
+                // Only apply size if children actually need more space
+                if (requiredWidth > 0 && requiredHeight > 0) {
+                    const currentWidth = containerRect.width;
+                    const currentHeight = containerRect.height;
+                    
+                    // Width adjustment
+                    if (!hasManualWidth && requiredWidth > currentWidth) {
                         container.style.width = requiredWidth + 'px';
+                    } else if (hasManualWidth && requiredWidth > currentWidth) {
+                        const manualWidth = parseInt(container.style.width);
+                        if (requiredWidth > manualWidth) {
+                            container.style.width = requiredWidth + 'px';
+                        }
                     }
-                }
-                
-                if (!hasManualHeight && requiredHeight > containerRect.height) {
-                    container.style.height = requiredHeight + 'px';
-                } else if (hasManualHeight && requiredHeight > containerRect.height) {
-                    // If manually resized but children need more space, expand minimally
-                    const manualHeight = parseInt(container.style.height);
-                    if (requiredHeight > manualHeight) {
+                    
+                    // Height adjustment  
+                    if (!hasManualHeight && requiredHeight > currentHeight) {
                         container.style.height = requiredHeight + 'px';
+                    } else if (hasManualHeight && requiredHeight > currentHeight) {
+                        const manualHeight = parseInt(container.style.height);
+                        if (requiredHeight > manualHeight) {
+                            container.style.height = requiredHeight + 'px';
+                        }
                     }
                 }
             }
