@@ -143,11 +143,55 @@ impl HtmlGenerator {
     <style>
         body {{
             font-family: monospace;
-            margin: 20px;
+            margin: 0;
             background-color: #f5f5f5;
-            padding: 20px;
-            overflow-x: auto;
+            overflow: auto;
+            height: 100vh;
+            width: 100vw;
+            position: relative;
+        }}
+        #zoom-container {{
+            transform-origin: 0 0;
+            transition: transform 0.2s ease-out;
             min-width: fit-content;
+            padding: 20px;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }}
+        #zoom-controls {{
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }}
+        .zoom-btn {{
+            padding: 8px 12px;
+            border: 2px solid #3498db;
+            background: white;
+            color: #3498db;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 14px;
+        }}
+        .zoom-btn:hover {{
+            background: #3498db;
+            color: white;
+        }}
+        #zoom-level {{
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+            min-width: 60px;
+            text-align: center;
         }}
         .memo-container {{
             border: 3px solid #333;
@@ -457,6 +501,10 @@ impl HtmlGenerator {
         }
         
         function autoResizeContainer(container) {
+            // Check if container has been manually resized (has inline styles)
+            const hasManualWidth = container.style.width && container.style.width !== '';
+            const hasManualHeight = container.style.height && container.style.height !== '';
+            
             // Always try to calculate required size based on all content
             const containerRect = container.getBoundingClientRect();
             let requiredWidth = containerRect.width;
@@ -481,7 +529,7 @@ impl HtmlGenerator {
                     
                     // Calculate required width (children + gaps + margins)
                     const gap = 25; // CSS gap
-                    const margin = 50; // Container margins
+                    const margin = 80; // Container margins (increased)
                     const childrenWidth = totalChildWidth + (gap * (children.length - 1)) + margin;
                     requiredWidth = Math.max(requiredWidth, childrenWidth);
                     
@@ -495,20 +543,167 @@ impl HtmlGenerator {
                     const child = childrenContainer.querySelector('.memo-container');
                     if (child) {
                         const childRect = child.getBoundingClientRect();
-                        requiredWidth = Math.max(requiredWidth, childRect.width + 80);
+                        requiredWidth = Math.max(requiredWidth, childRect.width + 120);
                         requiredHeight = Math.max(requiredHeight, containerRect.height + childRect.height + 80);
                     }
                 }
                 
-                // Apply new size if needed
-                if (requiredWidth > containerRect.width) {
+                // Apply new size if needed, but respect manual resizing
+                if (!hasManualWidth && requiredWidth > containerRect.width) {
                     container.style.width = requiredWidth + 'px';
+                } else if (hasManualWidth && requiredWidth > containerRect.width) {
+                    // If manually resized but children need more space, expand minimally
+                    const manualWidth = parseInt(container.style.width);
+                    if (requiredWidth > manualWidth) {
+                        container.style.width = requiredWidth + 'px';
+                    }
                 }
-                if (requiredHeight > containerRect.height) {
+                
+                if (!hasManualHeight && requiredHeight > containerRect.height) {
                     container.style.height = requiredHeight + 'px';
+                } else if (hasManualHeight && requiredHeight > containerRect.height) {
+                    // If manually resized but children need more space, expand minimally
+                    const manualHeight = parseInt(container.style.height);
+                    if (requiredHeight > manualHeight) {
+                        container.style.height = requiredHeight + 'px';
+                    }
                 }
             }
         }
+        
+        // Zoom functionality
+        let currentZoom = 1.0;
+        let panX = 0;
+        let panY = 0;
+        let isPanning = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+        
+        function updateZoomDisplay() {
+            document.getElementById('zoom-level').textContent = Math.round(currentZoom * 100) + '%';
+        }
+        
+        function applyZoom() {
+            const container = document.getElementById('zoom-container');
+            container.style.transform = `scale(${currentZoom}) translate(${panX}px, ${panY}px)`;
+            updateZoomDisplay();
+        }
+        
+        function zoomIn() {
+            currentZoom = Math.min(currentZoom * 1.25, 5.0);
+            applyZoom();
+        }
+        
+        function zoomOut() {
+            currentZoom = Math.max(currentZoom * 0.8, 0.1);
+            applyZoom();
+        }
+        
+        function resetZoom() {
+            currentZoom = 1.0;
+            panX = 0;
+            panY = 0;
+            applyZoom();
+        }
+        
+        function fitToScreen() {
+            const container = document.getElementById('zoom-container');
+            const containerRect = container.getBoundingClientRect();
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            
+            const scaleX = (windowWidth - 100) / containerRect.width;
+            const scaleY = (windowHeight - 100) / containerRect.height;
+            currentZoom = Math.min(scaleX, scaleY, 1.0);
+            
+            panX = 0;
+            panY = 0;
+            applyZoom();
+        }
+        
+        // Mouse wheel zoom (only with Ctrl key)
+        document.addEventListener('wheel', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                // Zoom mode
+                e.preventDefault();
+                
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                const newZoom = Math.max(Math.min(currentZoom * delta, 5.0), 0.1);
+                
+                // Zoom toward mouse position
+                const rect = document.getElementById('zoom-container').getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                const zoomRatio = newZoom / currentZoom;
+                panX = mouseX - (mouseX - panX) * zoomRatio;
+                panY = mouseY - (mouseY - panY) * zoomRatio;
+                
+                currentZoom = newZoom;
+                applyZoom();
+            }
+            // If no Ctrl key, allow normal scrolling
+        });
+        
+        // Panning with mouse drag
+        document.addEventListener('mousedown', function(e) {
+            // Don't pan when interacting with UI elements or resize handles
+            if (e.target.closest('#zoom-controls') || 
+                e.target.closest('.memo-header') ||
+                e.target.closest('.memo-container') || 
+                e.ctrlKey) {
+                return;
+            }
+            
+            // Only pan on background or body
+            if (e.target === document.body || e.target === document.getElementById('zoom-container')) {
+                isPanning = true;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                document.body.style.cursor = 'grab';
+            }
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (isPanning) {
+                const deltaX = e.clientX - lastMouseX;
+                const deltaY = e.clientY - lastMouseY;
+                
+                panX += deltaX / currentZoom;
+                panY += deltaY / currentZoom;
+                
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                
+                applyZoom();
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            isPanning = false;
+            document.body.style.cursor = 'default';
+        });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case '=':
+                    case '+':
+                        e.preventDefault();
+                        zoomIn();
+                        break;
+                    case '-':
+                        e.preventDefault();
+                        zoomOut();
+                        break;
+                    case '0':
+                        e.preventDefault();
+                        resetZoom();
+                        break;
+                }
+            }
+        });
         
         // Initialize all children as collapsed on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -521,7 +716,18 @@ impl HtmlGenerator {
 </head>
 <body class=\"");
         html.push_str(if is_horizontal { "horizontal-layout" } else { "" });
-        html.push_str("\">\n");
+        html.push_str("\">");
+        
+        html.push_str(r#"
+<div id="zoom-controls">
+    <button class="zoom-btn" onclick="zoomOut()">−</button>
+    <span id="zoom-level">100%</span>
+    <button class="zoom-btn" onclick="zoomIn()">+</button>
+    <button class="zoom-btn" onclick="resetZoom()">Reset</button>
+    <button class="zoom-btn" onclick="fitToScreen()">Fit</button>
+</div>
+<div id="zoom-container">
+"#);
 
         if is_horizontal {
             Self::generate_horizontal_layout(&mut html, memos);
@@ -531,7 +737,7 @@ impl HtmlGenerator {
             }
         }
 
-        html.push_str("</body>\n</html>");
+        html.push_str("</div></body>\n</html>");
         html
     }
 
