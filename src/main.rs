@@ -880,7 +880,8 @@ impl HtmlGenerator {
         
         function applyZoom() {
             const container = document.getElementById('zoom-container');
-            container.style.transform = `scale(${currentZoom}) translate(${panX}px, ${panY}px)`;
+            container.style.transformOrigin = '0 0';
+            container.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
             updateZoomDisplay();
         }
         
@@ -899,24 +900,16 @@ impl HtmlGenerator {
             const mouseX = currentMouseX || window.innerWidth / 2;
             const mouseY = currentMouseY || window.innerHeight / 2;
             
-            // Get container element
-            const container = document.getElementById('zoom-container');
-            
-            // Calculate mouse position relative to the container's current state
-            const rect = container.getBoundingClientRect();
-            const offsetX = mouseX - rect.left;
-            const offsetY = mouseY - rect.top;
-            
-            // Convert to original coordinates (before current transform)
-            const originalX = (offsetX / currentZoom) - panX;
-            const originalY = (offsetY / currentZoom) - panY;
+            // Calculate the point under the mouse in the original coordinate system
+            const pointX = (mouseX - panX) / currentZoom;
+            const pointY = (mouseY - panY) / currentZoom;
             
             // Update zoom
             currentZoom = newZoom;
             
-            // Calculate new pan to keep mouse position fixed
-            panX = offsetX / currentZoom - originalX;
-            panY = offsetY / currentZoom - originalY;
+            // Adjust pan so the point under the mouse stays in the same place
+            panX = mouseX - pointX * currentZoom;
+            panY = mouseY - pointY * currentZoom;
             
             applyZoom();
         }
@@ -959,26 +952,16 @@ impl HtmlGenerator {
                 const mouseX = e.clientX;
                 const mouseY = e.clientY;
                 
-                // Get container element
-                const container = document.getElementById('zoom-container');
-                
-                // Calculate mouse position relative to the container's current state
-                // We need to account for the current transform
-                const rect = container.getBoundingClientRect();
-                const offsetX = mouseX - rect.left;
-                const offsetY = mouseY - rect.top;
-                
-                // Convert to original coordinates (before current transform)
-                const originalX = (offsetX / currentZoom) - panX;
-                const originalY = (offsetY / currentZoom) - panY;
+                // Calculate the point under the mouse in the original coordinate system
+                const pointX = (mouseX - panX) / currentZoom;
+                const pointY = (mouseY - panY) / currentZoom;
                 
                 // Update zoom
-                const oldZoom = currentZoom;
                 currentZoom = newZoom;
                 
-                // Calculate new pan to keep mouse position fixed
-                panX = offsetX / currentZoom - originalX;
-                panY = offsetY / currentZoom - originalY;
+                // Adjust pan so the point under the mouse stays in the same place
+                panX = mouseX - pointX * currentZoom;
+                panY = mouseY - pointY * currentZoom;
                 
                 applyZoom();
             } else if (isRightMouseDown) {
@@ -986,8 +969,8 @@ impl HtmlGenerator {
                 e.preventDefault();
                 
                 const panSpeed = 2.0;
-                panX -= e.deltaX * panSpeed / currentZoom;
-                panY -= e.deltaY * panSpeed / currentZoom;
+                panX -= e.deltaX * panSpeed;
+                panY -= e.deltaY * panSpeed;
                 
                 applyZoom();
             }
@@ -1043,8 +1026,8 @@ impl HtmlGenerator {
                 const deltaX = e.clientX - lastMouseX;
                 const deltaY = e.clientY - lastMouseY;
                 
-                panX += deltaX / currentZoom;
-                panY += deltaY / currentZoom;
+                panX += deltaX;
+                panY += deltaY;
                 
                 lastMouseX = e.clientX;
                 lastMouseY = e.clientY;
