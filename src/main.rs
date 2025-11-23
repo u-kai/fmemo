@@ -871,6 +871,8 @@ impl HtmlGenerator {
         let isPanning = false;
         let lastMouseX = 0;
         let lastMouseY = 0;
+        let currentMouseX = 0;
+        let currentMouseY = 0;
         
         function updateZoomDisplay() {
             document.getElementById('zoom-level').textContent = Math.round(currentZoom * 100) + '%';
@@ -883,12 +885,39 @@ impl HtmlGenerator {
         }
         
         function zoomIn() {
-            currentZoom = Math.min(currentZoom * 1.25, 5.0);
-            applyZoom();
+            zoomAtPoint(1.25);
         }
         
         function zoomOut() {
-            currentZoom = Math.max(currentZoom * 0.8, 0.1);
+            zoomAtPoint(0.8);
+        }
+        
+        function zoomAtPoint(factor) {
+            const newZoom = Math.max(Math.min(currentZoom * factor, 5.0), 0.1);
+            
+            // Use current tracked mouse position or center of screen
+            const mouseX = currentMouseX || window.innerWidth / 2;
+            const mouseY = currentMouseY || window.innerHeight / 2;
+            
+            // Get container element
+            const container = document.getElementById('zoom-container');
+            
+            // Calculate mouse position relative to the container's current state
+            const rect = container.getBoundingClientRect();
+            const offsetX = mouseX - rect.left;
+            const offsetY = mouseY - rect.top;
+            
+            // Convert to original coordinates (before current transform)
+            const originalX = (offsetX / currentZoom) - panX;
+            const originalY = (offsetY / currentZoom) - panY;
+            
+            // Update zoom
+            currentZoom = newZoom;
+            
+            // Calculate new pan to keep mouse position fixed
+            panX = offsetX / currentZoom - originalX;
+            panY = offsetY / currentZoom - originalY;
+            
             applyZoom();
         }
         
@@ -926,16 +955,31 @@ impl HtmlGenerator {
                 const delta = e.deltaY > 0 ? 0.9 : 1.1;
                 const newZoom = Math.max(Math.min(currentZoom * delta, 5.0), 0.1);
                 
-                // Zoom toward mouse position
-                const rect = document.getElementById('zoom-container').getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const mouseY = e.clientY - rect.top;
+                // Get mouse position relative to viewport
+                const mouseX = e.clientX;
+                const mouseY = e.clientY;
                 
-                const zoomRatio = newZoom / currentZoom;
-                panX = mouseX - (mouseX - panX) * zoomRatio;
-                panY = mouseY - (mouseY - panY) * zoomRatio;
+                // Get container element
+                const container = document.getElementById('zoom-container');
                 
+                // Calculate mouse position relative to the container's current state
+                // We need to account for the current transform
+                const rect = container.getBoundingClientRect();
+                const offsetX = mouseX - rect.left;
+                const offsetY = mouseY - rect.top;
+                
+                // Convert to original coordinates (before current transform)
+                const originalX = (offsetX / currentZoom) - panX;
+                const originalY = (offsetY / currentZoom) - panY;
+                
+                // Update zoom
+                const oldZoom = currentZoom;
                 currentZoom = newZoom;
+                
+                // Calculate new pan to keep mouse position fixed
+                panX = offsetX / currentZoom - originalX;
+                panY = offsetY / currentZoom - originalY;
+                
                 applyZoom();
             } else if (isRightMouseDown) {
                 // Pan mode with right mouse + scroll
@@ -991,6 +1035,10 @@ impl HtmlGenerator {
         });
         
         document.addEventListener('mousemove', function(e) {
+            // Always track mouse position for zoom centering
+            currentMouseX = e.clientX;
+            currentMouseY = e.clientY;
+            
             if (isPanning) {
                 const deltaX = e.clientX - lastMouseX;
                 const deltaY = e.clientY - lastMouseY;
