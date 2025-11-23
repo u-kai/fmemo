@@ -550,8 +550,13 @@ impl HtmlGenerator {
         
         function updateContent(newHtml) {{
             const newDoc = new DOMParser().parseFromString(newHtml, 'text/html');
-            const newBody = newDoc.body;
-            const currentBody = document.body;
+            const newMemoView = newDoc.querySelector('#memo-view');
+            const currentMemoView = document.getElementById('memo-view');
+            
+            if (!newMemoView || !currentMemoView) return;
+            
+            // Store current view mode state
+            const isFlowMode = document.getElementById('flow-view').classList.contains('active');
             
             // Store current expand/collapse states
             const expandedStates = new Map();
@@ -559,8 +564,15 @@ impl HtmlGenerator {
                 expandedStates.set(index, container.classList.contains('expanded'));
             }});
             
-            // Replace body content
-            currentBody.innerHTML = newBody.innerHTML;
+            // Store current zoom and pan state
+            const currentZoomState = {{
+                zoom: currentZoom,
+                panX: panX,
+                panY: panY
+            }};
+            
+            // Replace only memo-view content, preserving view mode classes
+            currentMemoView.innerHTML = newMemoView.innerHTML;
             
             // Restore expand/collapse states
             document.querySelectorAll('.children-container').forEach((container, index) => {{
@@ -582,6 +594,13 @@ impl HtmlGenerator {
                     container.classList.add('collapsed');
                 }}
             }});
+            
+            // If in flow mode, regenerate flow diagram
+            if (isFlowMode) {{
+                setTimeout(() => {{
+                    generateFlowDiagram();
+                }}, 10);
+            }}
         }}"#, port);
         
         html.push_str("
@@ -645,6 +664,16 @@ impl HtmlGenerator {
         
         function buildHierarchyFromDOM() {
             const rootNodes = [];
+            const memoView = document.getElementById('memo-view');
+            
+            // Temporarily make memo-view visible to read DOM structure
+            const wasHidden = !memoView.classList.contains('active');
+            if (wasHidden) {
+                memoView.style.display = 'block';
+                memoView.style.visibility = 'hidden';
+                memoView.style.position = 'absolute';
+                memoView.style.left = '-9999px';
+            }
             
             // Get root level memo containers (direct children of memo-view)
             const rootContainers = document.querySelectorAll('#memo-view > .memo-container, #memo-view > .siblings-container > .memo-container');
@@ -655,6 +684,14 @@ impl HtmlGenerator {
                     rootNodes.push(node);
                 }
             });
+            
+            // Restore original state
+            if (wasHidden) {
+                memoView.style.display = '';
+                memoView.style.visibility = '';
+                memoView.style.position = '';
+                memoView.style.left = '';
+            }
             
             return rootNodes;
         }
@@ -1479,18 +1516,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
 
                         let clients = websocket_clients_clone.lock().unwrap();
+                        let memo_content = if is_horizontal_clone {
+                            let mut content = String::new();
+                            content.push_str("<div class=\"siblings-container\">");
+                            for memo in &memos {
+                                HtmlGenerator::generate_memo_horizontal(&mut content, memo);
+                            }
+                            content.push_str("</div>");
+                            content
+                        } else {
+                            memos.iter()
+                                .map(|memo| {
+                                    let mut memo_html = String::new();
+                                    HtmlGenerator::generate_memo(&mut memo_html, memo);
+                                    memo_html
+                                })
+                                .collect::<Vec<String>>()
+                                .join("")
+                        };
+                        
                         let update_msg = serde_json::json!({
                             "type": "update",
-                            "html": format!("<body>{}</body>", 
-                                memos.iter()
-                                    .map(|memo| {
-                                        let mut memo_html = String::new();
-                                        HtmlGenerator::generate_memo(&mut memo_html, memo);
-                                        memo_html
-                                    })
-                                    .collect::<Vec<String>>()
-                                    .join("")
-                            )
+                            "html": format!("<body><div id=\"memo-view\" class=\"view-mode active\">{}</div></body>", memo_content)
                         });
                         
                         for client in clients.iter() {
