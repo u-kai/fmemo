@@ -195,6 +195,30 @@ impl HtmlGenerator {
             min-width: 60px;
             text-align: center;
         }}
+        .control-separator {{
+            width: 1px;
+            height: 30px;
+            background: #ddd;
+            margin: 0 10px;
+        }}
+        .mode-btn {{
+            padding: 8px 16px;
+            border: 2px solid #2ecc71;
+            background: white;
+            color: #2ecc71;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 14px;
+        }}
+        .mode-btn:hover {{
+            background: #2ecc71;
+            color: white;
+        }}
+        .mode-btn.active {{
+            background: #2ecc71;
+            color: white;
+        }}
         .memo-container {{
             display: inline-block;
             width: max-content;
@@ -389,6 +413,101 @@ impl HtmlGenerator {
             font-weight: bold;
         }}
         
+        /* View mode management */
+        .view-mode {{
+            display: none;
+        }}
+        .view-mode.active {{
+            display: block;
+        }}
+        
+        /* Flow diagram styles */
+        #flow-view {{
+            padding: 40px 20px;
+            width: max-content;
+            min-height: 100vh;
+            position: relative;
+        }}
+        .flow-diagram-container {{
+            position: relative;
+            padding: 20px;
+        }}
+        .flow-tree-node {{
+            margin: 20px 0;
+        }}
+        .siblings-flow {{
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+            margin: 20px 0;
+        }}
+        .flow-tree-node.top-level {{
+            margin: 0 40px 60px 40px;
+        }}
+        .children-flow {{
+            margin-top: 40px;
+            margin-left: 40px;
+        }}
+        .flow-node {{
+            display: inline-block;
+            background: white;
+            border: 3px solid;
+            border-radius: 10px;
+            padding: 12px 20px;
+            font-family: monospace;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            min-width: 120px;
+            text-align: center;
+            position: relative;
+            margin: 10px;
+            white-space: nowrap;
+        }}
+        .flow-node:hover {{
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }}
+        .flow-node.level-1 {{ 
+            border-color: #e74c3c; 
+            background: #fdf2f2;
+            font-size: 16px;
+            font-weight: bold;
+        }}
+        .flow-node.level-2 {{ 
+            border-color: #3498db;
+            background: #f0f8ff;
+            font-size: 15px;
+        }}
+        .flow-node.level-3 {{ 
+            border-color: #2ecc71;
+            background: #f0fff4;
+        }}
+        .flow-node.level-4 {{ 
+            border-color: #f39c12;
+            background: #fffaf0;
+        }}
+        .flow-node.level-5 {{ 
+            border-color: #9b59b6;
+            background: #f8f5ff;
+        }}
+        .flow-node.level-6,
+        .flow-node.level-7,
+        .flow-node.level-8 {{ 
+            border-color: #95a5a6;
+            background: #f8f9fa;
+            font-size: 12px;
+        }}
+        .flow-connection-line {{
+            position: absolute;
+            z-index: 1;
+        }}
+        .flow-arrow {{
+            position: absolute;
+            z-index: 2;
+        }}
+        
     </style>
     <script>
         const ws = new WebSocket('ws://localhost:{}/ws');
@@ -455,6 +574,293 @@ impl HtmlGenerator {
                 childrenContainer.classList.remove('collapsed');
                 childrenContainer.classList.add('expanded');
                 icon.classList.add('expanded');
+            }
+        }
+        
+        // View mode switching
+        function switchToMemoMode() {
+            document.getElementById('memo-view').classList.add('active');
+            document.getElementById('flow-view').classList.remove('active');
+            document.getElementById('memo-mode-btn').classList.add('active');
+            document.getElementById('flow-mode-btn').classList.remove('active');
+        }
+        
+        function switchToFlowMode() {
+            document.getElementById('memo-view').classList.remove('active');
+            document.getElementById('flow-view').classList.add('active');
+            document.getElementById('memo-mode-btn').classList.remove('active');
+            document.getElementById('flow-mode-btn').classList.add('active');
+            
+            // Generate flow diagram
+            generateFlowDiagram();
+        }
+        
+        function generateFlowDiagram() {
+            const flowView = document.getElementById('flow-view');
+            if (!flowView) return;
+            
+            // Build hierarchical structure from memo containers
+            const hierarchy = buildHierarchyFromDOM();
+            
+            // Generate hierarchical flow HTML
+            let html = '<div class=\"flow-diagram-container\">';
+            html += generateHierarchicalFlow(hierarchy, 0);
+            html += '</div>';
+            
+            flowView.innerHTML = html;
+            
+            // Add connecting lines after DOM is ready
+            setTimeout(() => {
+                addConnectingLines();
+            }, 100);
+        }
+        
+        function buildHierarchyFromDOM() {
+            const rootNodes = [];
+            
+            // Get root level memo containers (direct children of memo-view)
+            const rootContainers = document.querySelectorAll('#memo-view > .memo-container, #memo-view > .siblings-container > .memo-container');
+            
+            rootContainers.forEach(container => {
+                const node = buildNodeFromContainer(container);
+                if (node) {
+                    rootNodes.push(node);
+                }
+            });
+            
+            return rootNodes;
+        }
+        
+        function buildNodeFromContainer(container) {
+            const titleElement = container.querySelector('.memo-title');
+            if (!titleElement) return null;
+            
+            let level = 1;
+            for (let i = 1; i <= 8; i++) {
+                if (container.classList.contains('level-' + i)) {
+                    level = i;
+                    break;
+                }
+            }
+            
+            const node = {
+                title: titleElement.textContent.trim(),
+                level: level,
+                children: []
+            };
+            
+            // Find children containers
+            const childrenContainer = container.querySelector('.children-container');
+            if (childrenContainer) {
+                const childContainers = childrenContainer.querySelectorAll(':scope > .memo-container, :scope > .siblings-container > .memo-container');
+                childContainers.forEach(childContainer => {
+                    const childNode = buildNodeFromContainer(childContainer);
+                    if (childNode) {
+                        node.children.push(childNode);
+                    }
+                });
+            }
+            
+            return node;
+        }
+        
+        function generateHierarchicalFlow(nodes, depth) {
+            if (!nodes || nodes.length === 0) return '';
+            
+            let html = '';
+            
+            if (nodes.length === 1) {
+                // Single node
+                const node = nodes[0];
+                html += '<div class=\"flow-tree-node\">';
+                html += generateFlowNode(node, depth);
+                if (node.children.length > 0) {
+                    html += '<div class=\"children-flow\">';
+                    html += generateHierarchicalFlow(node.children, depth + 1);
+                    html += '</div>';
+                }
+                html += '</div>';
+            } else {
+                // Multiple siblings
+                html += '<div class=\"siblings-flow\">';
+                nodes.forEach(node => {
+                    const isTopLevel = node.level === 1 ? ' top-level' : '';
+                    html += '<div class=\"flow-tree-node sibling' + isTopLevel + '\">';
+                    html += generateFlowNode(node, depth);
+                    if (node.children.length > 0) {
+                        html += '<div class=\"children-flow\">';
+                        html += generateHierarchicalFlow(node.children, depth + 1);
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+            
+            return html;
+        }
+        
+        function generateFlowNode(node, depth) {
+            const safeTitle = node.title.replace(/'/g, '&#39;').replace(/\"/g, '&quot;');
+            return '<div class=\"flow-node level-' + node.level + ' depth-' + depth + '\" onclick=\"jumpToMemo(\\'' + safeTitle + '\\')\"> ' + node.title + '</div>';
+        }
+        
+        function addConnectingLines() {
+            // Remove existing lines
+            document.querySelectorAll('.flow-connection-line').forEach(line => line.remove());
+            
+            // Add parent-child lines (vertical)
+            document.querySelectorAll('.flow-tree-node').forEach(treeNode => {
+                const parentNode = treeNode.querySelector(':scope > .flow-node');
+                const childrenFlow = treeNode.querySelector(':scope > .children-flow');
+                
+                if (parentNode && childrenFlow) {
+                    const childNodes = childrenFlow.querySelectorAll(':scope > .flow-tree-node > .flow-node, :scope > .siblings-flow > .flow-tree-node > .flow-node');
+                    
+                    if (childNodes.length > 0) {
+                        childNodes.forEach(childNode => {
+                            createVerticalLine(parentNode, childNode);
+                        });
+                    }
+                }
+            });
+            
+            // Add sibling lines (horizontal) - skip level 1 siblings
+            document.querySelectorAll('.siblings-flow').forEach(siblingsContainer => {
+                const siblingNodes = siblingsContainer.querySelectorAll(':scope > .flow-tree-node > .flow-node');
+                
+                // Check if any of the siblings are level-1 (top level)
+                let hasLevel1 = false;
+                siblingNodes.forEach(node => {
+                    if (node.classList.contains('level-1')) {
+                        hasLevel1 = true;
+                    }
+                });
+                
+                // Only add horizontal lines if not level-1 siblings
+                if (!hasLevel1) {
+                    for (let i = 0; i < siblingNodes.length - 1; i++) {
+                        createHorizontalLine(siblingNodes[i], siblingNodes[i + 1]);
+                    }
+                }
+            });
+        }
+        
+        function createVerticalLine(parentNode, childNode) {
+            const parentRect = parentNode.getBoundingClientRect();
+            const childRect = childNode.getBoundingClientRect();
+            const flowRect = document.getElementById('flow-view').getBoundingClientRect();
+            
+            const line = document.createElement('div');
+            line.className = 'flow-connection-line vertical-line';
+            
+            const startX = parentRect.left + parentRect.width / 2 - flowRect.left;
+            const startY = parentRect.bottom - flowRect.top;
+            const endY = childRect.top - flowRect.top;
+            
+            line.style.position = 'absolute';
+            line.style.left = (startX - 1) + 'px';
+            line.style.top = startY + 'px';
+            line.style.width = '2px';
+            line.style.height = (endY - startY) + 'px';
+            line.style.background = '#34495e';
+            line.style.zIndex = '1';
+            
+            document.getElementById('flow-view').appendChild(line);
+            
+            // Add arrow at the end
+            const arrow = document.createElement('div');
+            arrow.className = 'flow-arrow down-arrow';
+            arrow.style.position = 'absolute';
+            arrow.style.left = (startX - 6) + 'px';
+            arrow.style.top = (endY - 10) + 'px';
+            arrow.style.width = '0';
+            arrow.style.height = '0';
+            arrow.style.borderLeft = '6px solid transparent';
+            arrow.style.borderRight = '6px solid transparent';
+            arrow.style.borderTop = '10px solid #34495e';
+            arrow.style.zIndex = '2';
+            
+            document.getElementById('flow-view').appendChild(arrow);
+        }
+        
+        function createHorizontalLine(leftNode, rightNode) {
+            const leftRect = leftNode.getBoundingClientRect();
+            const rightRect = rightNode.getBoundingClientRect();
+            const flowRect = document.getElementById('flow-view').getBoundingClientRect();
+            
+            const line = document.createElement('div');
+            line.className = 'flow-connection-line horizontal-line';
+            
+            const startX = leftRect.right - flowRect.left;
+            const endX = rightRect.left - flowRect.left;
+            const y = leftRect.top + leftRect.height / 2 - flowRect.top;
+            
+            line.style.position = 'absolute';
+            line.style.left = startX + 'px';
+            line.style.top = (y - 1) + 'px';
+            line.style.width = (endX - startX) + 'px';
+            line.style.height = '2px';
+            line.style.background = '#95a5a6';
+            line.style.zIndex = '1';
+            
+            document.getElementById('flow-view').appendChild(line);
+            
+            // Add arrow at the end
+            const arrow = document.createElement('div');
+            arrow.className = 'flow-arrow right-arrow';
+            arrow.style.position = 'absolute';
+            arrow.style.left = (endX - 10) + 'px';
+            arrow.style.top = (y - 6) + 'px';
+            arrow.style.width = '0';
+            arrow.style.height = '0';
+            arrow.style.borderTop = '6px solid transparent';
+            arrow.style.borderBottom = '6px solid transparent';
+            arrow.style.borderLeft = '10px solid #95a5a6';
+            arrow.style.zIndex = '2';
+            
+            document.getElementById('flow-view').appendChild(arrow);
+        }
+        
+        function getLevelTitle(level) {
+            const titles = {
+                1: 'Main Sections (# level)',
+                2: 'Sub Sections (## level)',
+                3: 'Components (### level)',
+                4: 'Functions (#### level)',
+                5: 'Details (##### level)',
+                6: 'Deep Details (###### level)',
+                7: 'Extra Deep (####### level)',
+                8: 'Deepest (######## level)'
+            };
+            return titles[level] || `Level ${level}`;
+        }
+        
+        function jumpToMemo(title) {
+            // Switch back to memo mode
+            switchToMemoMode();
+            
+            // Find and highlight the memo
+            const memoTitles = document.querySelectorAll('#memo-view .memo-title');
+            for (let titleEl of memoTitles) {
+                if (titleEl.textContent.trim() === title) {
+                    titleEl.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'center' 
+                    });
+                    
+                    // Highlight effect
+                    const container = titleEl.closest('.memo-container');
+                    if (container) {
+                        container.style.background = '#fff3cd';
+                        container.style.borderColor = '#ffc107';
+                        setTimeout(() => {
+                            container.style.background = '';
+                            container.style.borderColor = '';
+                        }, 2000);
+                    }
+                    break;
+                }
             }
         }
         
@@ -645,8 +1051,12 @@ impl HtmlGenerator {
     <button class="zoom-btn" onclick="zoomIn()">+</button>
     <button class="zoom-btn" onclick="resetZoom()">Reset</button>
     <button class="zoom-btn" onclick="fitToScreen()">Fit</button>
+    <div class="control-separator"></div>
+    <button id="memo-mode-btn" class="mode-btn active" onclick="switchToMemoMode()">Memo</button>
+    <button id="flow-mode-btn" class="mode-btn" onclick="switchToFlowMode()">Flow</button>
 </div>
 <div id="zoom-container">
+    <div id="memo-view" class="view-mode active">
 "#);
 
         if is_horizontal {
@@ -657,7 +1067,7 @@ impl HtmlGenerator {
             }
         }
 
-        html.push_str("</div></body>\n</html>");
+        html.push_str("    </div>\n    <div id=\"flow-view\" class=\"view-mode\"></div>\n</div></body>\n</html>");
         html
     }
 
