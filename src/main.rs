@@ -906,28 +906,68 @@ impl HtmlGenerator {
             // Switch back to memo mode
             switchToMemoMode();
             
-            // Find and highlight the memo
+            // Find the target memo container
             const memoTitles = document.querySelectorAll('#memo-view .memo-title');
+            let targetContainer = null;
+            
             for (let titleEl of memoTitles) {
                 if (titleEl.textContent.trim() === title) {
-                    titleEl.scrollIntoView({ 
+                    targetContainer = titleEl.closest('.memo-container');
+                    break;
+                }
+            }
+            
+            if (targetContainer) {
+                // Recursively expand all parent containers
+                expandToTarget(targetContainer);
+                
+                // Scroll to and highlight the target
+                setTimeout(() => {
+                    targetContainer.scrollIntoView({ 
                         behavior: 'smooth', 
                         block: 'center' 
                     });
                     
                     // Highlight effect
-                    const container = titleEl.closest('.memo-container');
-                    if (container) {
-                        container.style.background = '#fff3cd';
-                        container.style.borderColor = '#ffc107';
-                        setTimeout(() => {
-                            container.style.background = '';
-                            container.style.borderColor = '';
-                        }, 2000);
-                    }
-                    break;
-                }
+                    targetContainer.style.background = '#fff3cd';
+                    targetContainer.style.borderColor = '#ffc107';
+                    setTimeout(() => {
+                        targetContainer.style.background = '';
+                        targetContainer.style.borderColor = '';
+                    }, 2000);
+                }, 100);
             }
+        }
+        
+        function expandToTarget(targetContainer) {
+            // Find all parent containers by traversing up the DOM
+            const parentsToExpand = [];
+            let current = targetContainer.parentElement;
+            
+            while (current && current.id !== 'memo-view') {
+                // If this is a children-container, we need to expand it
+                if (current.classList.contains('children-container')) {
+                    parentsToExpand.push(current);
+                }
+                current = current.parentElement;
+            }
+            
+            // Expand all parent containers from top to bottom
+            parentsToExpand.reverse().forEach(container => {
+                if (container.classList.contains('collapsed')) {
+                    container.classList.remove('collapsed');
+                    container.classList.add('expanded');
+                    
+                    // Also update the expand icon
+                    const header = container.previousElementSibling;
+                    if (header && header.classList.contains('memo-header')) {
+                        const icon = header.querySelector('.expand-icon');
+                        if (icon) {
+                            icon.classList.add('expanded');
+                        }
+                    }
+                }
+            });
         }
         
         // Zoom functionality

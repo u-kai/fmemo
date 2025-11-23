@@ -34,3 +34,13 @@ fn load_config() -> Config {
 
 <desc>SQLクエリを実行して結果を返す</desc>
 <path>src/db/query.rs:30</path>
+
+#### SELECT文
+
+<desc>データを選択するクエリ</desc>
+<path>src/db/query.rs:45</path>
+
+##### ジョイン処理
+
+<desc>複数テーブルを結合する処理</desc>
+<path>src/db/query.rs:78</path>
