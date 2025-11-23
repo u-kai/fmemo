@@ -133,7 +133,7 @@ impl MarkdownParser {
 struct HtmlGenerator;
 
 impl HtmlGenerator {
-    fn generate(memos: &[FunctionMemo], port: u16) -> String {
+    fn generate(memos: &[FunctionMemo], port: u16, is_horizontal: bool) -> String {
         let mut html = format!(r#"
 <!DOCTYPE html>
 <html>
@@ -146,6 +146,8 @@ impl HtmlGenerator {
             margin: 20px;
             background-color: #f5f5f5;
             padding: 20px;
+            overflow-x: auto;
+            min-width: fit-content;
         }}
         .memo-container {{
             border: 3px solid #333;
@@ -153,7 +155,10 @@ impl HtmlGenerator {
             background-color: white;
             position: relative;
             border-radius: 8px;
-            min-height: 60px;
+            min-height: 80px;
+            min-width: 300px;
+            resize: both;
+            overflow: auto;
         }}
         .memo-header {{
             padding: 15px 20px 10px 20px;
@@ -282,6 +287,78 @@ impl HtmlGenerator {
         .no-children .expand-icon {{
             visibility: hidden;
         }}
+        
+        /* Horizontal layout styles */
+        .horizontal-layout {{
+            display: block;
+            min-width: max-content;
+        }}
+        .horizontal-layout .siblings-container {{
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 25px;
+            align-items: flex-start;
+            min-width: max-content;
+        }}
+        .horizontal-layout .memo-container {{
+            flex: 0 0 auto;
+            min-width: 400px;
+            width: 500px;
+        }}
+        .horizontal-layout .children-container {{
+            margin: 25px 20px 20px 20px;
+            width: auto;
+        }}
+        .horizontal-layout .children-container > .memo-container {{
+            margin: 20px 0;
+            width: 100%;
+            min-width: 400px;
+        }}
+        .horizontal-layout .children-container > .siblings-container {{
+            width: 100%;
+            min-width: max-content;
+        }}
+        .horizontal-layout .children-container > .siblings-container > .memo-container {{
+            margin: 15px 0;
+            min-width: 400px;
+            width: 480px;
+        }}
+        .horizontal-layout .children-container .children-container > .siblings-container > .memo-container {{
+            min-width: 350px;
+            width: 420px;
+        }}
+        .horizontal-layout .children-container .children-container .children-container > .siblings-container > .memo-container {{
+            min-width: 300px;
+            width: 380px;
+        }}
+        .code-language {{
+            background-color: #ddd;
+            padding: 2px 8px;
+            font-size: 0.8em;
+            border-radius: 3px 3px 0 0;
+            color: #333;
+            font-weight: bold;
+        }}
+        
+        /* Resize handle styling */
+        .memo-container::-webkit-resizer {{
+            background: linear-gradient(135deg, transparent 40%, #999 40%, #999 60%, transparent 60%);
+            border-radius: 0 0 8px 0;
+        }}
+        
+        /* Better resize handle for all browsers */
+        .memo-container::after {{
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, transparent 40%, #666 40%, #666 45%, transparent 45%, transparent 55%, #666 55%, #666 60%, transparent 60%);
+            cursor: se-resize;
+            border-radius: 0 0 8px 0;
+            pointer-events: none;
+        }}
     </style>
     <script>
         const ws = new WebSocket('ws://localhost:{}/ws');
@@ -330,7 +407,7 @@ impl HtmlGenerator {
             }});
         }}"#, port);
         
-        html.push_str(r#"
+        html.push_str("
         function toggleMemo(element) {
             const container = element.parentElement;
             const childrenContainer = container.querySelector('.children-container');
@@ -347,6 +424,88 @@ impl HtmlGenerator {
                     childrenContainer.classList.remove('collapsed');
                     childrenContainer.classList.add('expanded');
                     icon.classList.add('expanded');
+                    
+                    // Auto-resize container when expanding children
+                    setTimeout(() => {
+                        autoResizeContainerRecursive(container);
+                    }, 300); // Wait for transition to complete
+                }
+            }
+        }
+        
+        function autoResizeContainerRecursive(container) {
+            // First resize this container
+            autoResizeContainer(container);
+            
+            // Then find parent containers and resize them too
+            let currentContainer = container;
+            while (currentContainer) {
+                // Find the parent memo container
+                let parentContainer = currentContainer.parentElement;
+                while (parentContainer && !parentContainer.classList.contains('memo-container')) {
+                    parentContainer = parentContainer.parentElement;
+                }
+                
+                if (parentContainer) {
+                    // Resize parent based on its children
+                    autoResizeContainer(parentContainer);
+                    currentContainer = parentContainer;
+                } else {
+                    break;
+                }
+            }
+        }
+        
+        function autoResizeContainer(container) {
+            // Always try to calculate required size based on all content
+            const containerRect = container.getBoundingClientRect();
+            let requiredWidth = containerRect.width;
+            let requiredHeight = containerRect.height;
+            
+            // Check if there are expanded children
+            const childrenContainer = container.querySelector('.children-container');
+            if (childrenContainer && childrenContainer.classList.contains('expanded')) {
+                const siblingsContainer = childrenContainer.querySelector('.siblings-container');
+                
+                if (siblingsContainer) {
+                    // Multiple siblings case
+                    const children = siblingsContainer.querySelectorAll(':scope > .memo-container');
+                    let totalChildWidth = 0;
+                    let maxChildHeight = 0;
+                    
+                    children.forEach(child => {
+                        const rect = child.getBoundingClientRect();
+                        totalChildWidth += rect.width;
+                        maxChildHeight = Math.max(maxChildHeight, rect.height);
+                    });
+                    
+                    // Calculate required width (children + gaps + margins)
+                    const gap = 25; // CSS gap
+                    const margin = 50; // Container margins
+                    const childrenWidth = totalChildWidth + (gap * (children.length - 1)) + margin;
+                    requiredWidth = Math.max(requiredWidth, childrenWidth);
+                    
+                    // Calculate required height (current + children + buffer)
+                    const headerHeight = 100; // Estimate for header and content
+                    const childrenHeight = maxChildHeight + headerHeight + 50; // Buffer
+                    requiredHeight = Math.max(requiredHeight, childrenHeight);
+                    
+                } else {
+                    // Single child case
+                    const child = childrenContainer.querySelector('.memo-container');
+                    if (child) {
+                        const childRect = child.getBoundingClientRect();
+                        requiredWidth = Math.max(requiredWidth, childRect.width + 80);
+                        requiredHeight = Math.max(requiredHeight, containerRect.height + childRect.height + 80);
+                    }
+                }
+                
+                // Apply new size if needed
+                if (requiredWidth > containerRect.width) {
+                    container.style.width = requiredWidth + 'px';
+                }
+                if (requiredHeight > containerRect.height) {
+                    container.style.height = requiredHeight + 'px';
                 }
             }
         }
@@ -360,15 +519,93 @@ impl HtmlGenerator {
         });
     </script>
 </head>
-<body>
-"#);
+<body class=\"");
+        html.push_str(if is_horizontal { "horizontal-layout" } else { "" });
+        html.push_str("\">\n");
 
-        for memo in memos {
-            Self::generate_memo(&mut html, memo);
+        if is_horizontal {
+            Self::generate_horizontal_layout(&mut html, memos);
+        } else {
+            for memo in memos {
+                Self::generate_memo(&mut html, memo);
+            }
         }
 
         html.push_str("</body>\n</html>");
         html
+    }
+
+    fn generate_horizontal_layout(html: &mut String, memos: &[FunctionMemo]) {
+        // 最上位レベルの兄弟要素を横並びで表示
+        html.push_str("<div class=\"siblings-container\">");
+        for memo in memos {
+            Self::generate_memo_horizontal(html, memo);
+        }
+        html.push_str("</div>");
+    }
+
+    fn generate_memo_horizontal(html: &mut String, memo: &FunctionMemo) {
+        let level_class = format!("level-{}", memo.level.min(8));
+        let has_children = !memo.children.is_empty();
+        let no_children_class = if has_children { "" } else { " no-children" };
+        
+        // Start container
+        html.push_str("<div class=\"memo-container ");
+        html.push_str(&level_class);
+        html.push_str(no_children_class);
+        html.push_str("\">");
+        
+        // Header
+        html.push_str("<div class=\"memo-header\" onclick=\"toggleMemo(this)\">");
+        html.push_str("<div class=\"memo-title-container\">");
+        html.push_str("<span class=\"expand-icon\">▶</span>");
+        html.push_str(&format!("<h{} class=\"memo-title\">", memo.level.min(6)));
+        html.push_str(&Self::escape_html(&memo.title));
+        html.push_str(&format!("</h{}>", memo.level.min(6)));
+        html.push_str("</div>");
+        html.push_str("</div>");
+
+        if !memo.content.trim().is_empty() {
+            html.push_str("<div class=\"memo-content\">");
+            html.push_str(&Self::markdown_to_html(&memo.content));
+            html.push_str("</div>");
+        }
+
+        // Add code blocks
+        if !memo.code_blocks.is_empty() {
+            html.push_str("<div class=\"memo-body\">");
+            for code_block in &memo.code_blocks {
+                html.push_str("<div class=\"code-block\">");
+                if !code_block.language.is_empty() {
+                    html.push_str(&format!("<div class=\"code-language\">{}</div>", Self::escape_html(&code_block.language)));
+                }
+                html.push_str("<pre><code>");
+                html.push_str(&Self::escape_html(&code_block.code));
+                html.push_str("</code></pre></div>");
+            }
+            html.push_str("</div>");
+        }
+
+        // Add children recursively - siblings are always horizontal
+        if !memo.children.is_empty() {
+            html.push_str("<div class=\"children-container\">");
+            if memo.children.len() > 1 {
+                // Multiple children = siblings, display horizontally
+                html.push_str("<div class=\"siblings-container\">");
+                for child in &memo.children {
+                    Self::generate_memo_horizontal(html, child);
+                }
+                html.push_str("</div>");
+            } else {
+                // Single child, no siblings-container needed
+                for child in &memo.children {
+                    Self::generate_memo_horizontal(html, child);
+                }
+            }
+            html.push_str("</div>");
+        }
+
+        html.push_str("</div>");
     }
 
     pub fn generate_memo(html: &mut String, memo: &FunctionMemo) {
@@ -376,41 +613,35 @@ impl HtmlGenerator {
         let has_children = !memo.children.is_empty();
         let no_children_class = if has_children { "" } else { " no-children" };
         
-        html.push_str(&format!(
-            r#"<div class="memo-container {}{}">
-            <div class="memo-header" onclick="toggleMemo(this)">
-                <div class="memo-title-container">
-                    <span class="expand-icon">▶</span>
-                    <h{} class="memo-title">{}</h{}>
-                </div>
-            </div>
-"#,
-            level_class,
-            no_children_class,
-            memo.level.min(6),
-            Self::escape_html(&memo.title),
-            memo.level.min(6)
-        ));
+        // Start container
+        html.push_str("<div class=\"memo-container ");
+        html.push_str(&level_class);
+        html.push_str(no_children_class);
+        html.push_str("\">");
+        
+        // Header
+        html.push_str("<div class=\"memo-header\" onclick=\"toggleMemo(this)\">");
+        html.push_str("<div class=\"memo-title-container\">");
+        html.push_str("<span class=\"expand-icon\">▶</span>");
+        html.push_str(&format!("<h{} class=\"memo-title\">", memo.level.min(6)));
+        html.push_str(&Self::escape_html(&memo.title));
+        html.push_str(&format!("</h{}>", memo.level.min(6)));
+        html.push_str("</div>");
+        html.push_str("</div>");
 
         if !memo.content.trim().is_empty() {
-            html.push_str(&format!(
-                r#"<div class="memo-content">{}</div>
-"#,
-                Self::markdown_to_html(&memo.content)
-            ));
+            html.push_str("<div class=\"memo-content\">");
+            html.push_str(&Self::markdown_to_html(&memo.content));
+            html.push_str("</div>");
         }
 
         // Add code blocks
         if !memo.code_blocks.is_empty() {
             html.push_str("<div class=\"memo-body\">");
             for code_block in &memo.code_blocks {
-                html.push_str(&format!(
-                    r#"<div class="code-block">
-                    <pre><code>{}</code></pre>
-                    </div>
-"#,
-                    Self::escape_html(&code_block.code)
-                ));
+                html.push_str("<div class=\"code-block\"><pre><code>");
+                html.push_str(&Self::escape_html(&code_block.code));
+                html.push_str("</code></pre></div>");
             }
             html.push_str("</div>");
         }
@@ -424,7 +655,7 @@ impl HtmlGenerator {
             html.push_str("</div>");
         }
 
-        html.push_str("</div>\n");
+        html.push_str("</div>");
     }
 
     fn escape_html(text: &str) -> String {
@@ -524,11 +755,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("Port to serve on")
                 .default_value("3030")
         )
+        .arg(
+            Arg::new("layout")
+                .short('l')
+                .long("layout")
+                .value_name("LAYOUT")
+                .help("Layout mode: vertical (default) or horizontal")
+                .default_value("vertical")
+                .value_parser(["vertical", "horizontal"])
+        )
         .get_matches();
 
     let file_path = matches.get_one::<String>("file").unwrap();
     let port: u16 = matches.get_one::<String>("port").unwrap().parse()
         .expect("Port must be a valid number");
+    let layout = matches.get_one::<String>("layout").unwrap();
+    let is_horizontal = layout == "horizontal";
 
     // Check if file exists
     if !std::path::Path::new(file_path).exists() {
@@ -548,6 +790,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let file_path_clone = file_path.clone();
     let port_clone = port;
+    let is_horizontal_clone = is_horizontal;
     thread::spawn(move || {
         loop {
             match rx.recv() {
@@ -555,7 +798,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Ok(content) = fs::read_to_string(&file_path_clone) {
                         let parser = MarkdownParser::new(content);
                         let memos = parser.parse();
-                        let html = HtmlGenerator::generate(&memos, port_clone);
+                        let html = HtmlGenerator::generate(&memos, port_clone, is_horizontal_clone);
                         
                         {
                             let mut html_guard = html_content_clone.lock().unwrap();
@@ -590,7 +833,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(content) = fs::read_to_string(file_path) {
         let parser = MarkdownParser::new(content);
         let memos = parser.parse();
-        let html = HtmlGenerator::generate(&memos, port);
+        let html = HtmlGenerator::generate(&memos, port, is_horizontal);
         *html_content.lock().unwrap() = html;
     }
 
