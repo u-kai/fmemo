@@ -453,17 +453,45 @@ impl HtmlGenerator {
             background: white;
             border: 3px solid;
             border-radius: 10px;
-            padding: 12px 20px;
+            padding: 12px 16px;
             font-family: monospace;
             font-size: 14px;
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            min-width: 120px;
+            min-width: 100px;
+            max-width: 250px;
+            width: fit-content;
             text-align: center;
             position: relative;
             margin: 10px;
-            white-space: nowrap;
+            white-space: normal;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }}
+        .flow-node-title {{
+            font-weight: bold;
+            margin-bottom: 6px;
+        }}
+        .flow-node-description {{
+            font-size: 11px;
+            color: #666;
+            font-style: italic;
+            line-height: 1.2;
+            margin-top: 4px;
+            opacity: 0.8;
+        }}
+        .flow-node-path {{
+            font-size: 10px;
+            color: #888;
+            font-family: 'Courier New', monospace;
+            background: rgba(0,0,0,0.05);
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-top: 4px;
+            border: 1px solid rgba(0,0,0,0.1);
+            word-break: break-all;
+            overflow-wrap: break-word;
         }}
         .flow-node:hover {{
             transform: translateY(-3px);
@@ -643,9 +671,32 @@ impl HtmlGenerator {
                 }
             }
             
+            // Extract description and path from content
+            const contentElement = container.querySelector('.memo-content, .memo-body');
+            let description = '';
+            let path = '';
+            
+            if (contentElement) {
+                const htmlContent = contentElement.innerHTML;
+                
+                // Extract description from <desc></desc> tags
+                const descMatch = htmlContent.match(/<desc>(.*?)<\\/desc>/i);
+                if (descMatch) {
+                    description = descMatch[1].trim();
+                }
+                
+                // Extract path from <path></path> tags
+                const pathMatch = htmlContent.match(/<path>(.*?)<\\/path>/i);
+                if (pathMatch) {
+                    path = pathMatch[1].trim();
+                }
+            }
+            
             const node = {
                 title: titleElement.textContent.trim(),
                 level: level,
+                description: description,
+                path: path,
                 children: []
             };
             
@@ -702,7 +753,22 @@ impl HtmlGenerator {
         
         function generateFlowNode(node, depth) {
             const safeTitle = node.title.replace(/'/g, '&#39;').replace(/\"/g, '&quot;');
-            return '<div class=\"flow-node level-' + node.level + ' depth-' + depth + '\" onclick=\"jumpToMemo(\\'' + safeTitle + '\\')\"> ' + node.title + '</div>';
+            const safeDescription = (node.description || '').replace(/'/g, '&#39;').replace(/\"/g, '&quot;');
+            const safePath = (node.path || '').replace(/'/g, '&#39;').replace(/\"/g, '&quot;');
+            
+            let html = '<div class=\"flow-node level-' + node.level + ' depth-' + depth + '\" onclick=\"jumpToMemo(\\'' + safeTitle + '\\')\">'; 
+            html += '<div class=\"flow-node-title\">' + node.title + '</div>';
+            
+            if (node.description && node.description.length > 0) {
+                html += '<div class=\"flow-node-description\">' + node.description + '</div>';
+            }
+            
+            if (node.path && node.path.length > 0) {
+                html += '<div class=\"flow-node-path\">' + node.path + '</div>';
+            }
+            
+            html += '</div>';
+            return html;
         }
         
         function addConnectingLines() {
