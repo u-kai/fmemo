@@ -7,11 +7,18 @@
   overflow-x: auto;
   font-family: 'Courier New', monospace;
   font-size: 0.9em;
+  text-align: left; /* ensure code is left-aligned */
 }
 
 .code-block pre {
   margin: 0;
-  white-space: pre-wrap;
+  white-space: pre; /* do not wrap code lines */
+  text-align: left;
+}
+
+.code-block code {
+  display: block;
+  text-align: left;
 }
 
 .code-language {

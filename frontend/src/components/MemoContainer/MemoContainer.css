@@ -77,6 +77,7 @@
 
 .memo-body {
   padding: 0px 20px 20px 20px;
+  text-align: left; /* ensure code and inline content are left-aligned */
 }
 
 .children-container {
