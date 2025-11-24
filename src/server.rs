@@ -382,24 +382,56 @@ pub fn start_directory_watcher<P: AsRef<Path>>(
 
     thread::spawn(move || {
         let _watcher = watcher;
+        let mut last_processed: std::collections::HashMap<std::path::PathBuf, std::time::SystemTime> = std::collections::HashMap::new();
         
         loop {
             match rx.recv() {
                 Ok(Ok(event)) => {
+                    use std::collections::HashSet;
+                    use notify::EventKind;
+                    
+                    // Only process actual file content changes
+                    if !matches!(event.kind, 
+                        EventKind::Modify(notify::event::ModifyKind::Data(_)) | 
+                        EventKind::Create(_)
+                    ) {
+                        continue;
+                    }
+                    
+                    let now = std::time::SystemTime::now();
+                    let mut processed_files = HashSet::new();
+                    
                     // Check if any changed file is a .fmemo file
                     for path in &event.paths {
-                        if path.extension().and_then(|s| s.to_str()) == Some("fmemo") {
-                            match scan_directory(&root_path) {
-                                Ok(tree) => {
-                                    let update_msg = serde_json::json!({
-                                        "type": "directory_updated",
-                                        "tree": tree
-                                    });
-                                    
-                                    broadcast_to_clients(&clients, update_msg);
-                                    break; // Only send one update per event
+                        if path.extension().and_then(|s| s.to_str()) == Some("fmemo") && 
+                           processed_files.insert(path.clone()) {
+                            
+                            // Check if we processed this file recently (within 2 seconds)
+                            if let Some(last_time) = last_processed.get(path) {
+                                if let Ok(duration) = now.duration_since(*last_time) {
+                                    if duration.as_secs() < 2 {
+                                        println!("Skipping recent file change: {}", path.display());
+                                        continue;
+                                    }
                                 }
-                                Err(e) => eprintln!("Directory scan error: {:?}", e),
+                            }
+                            
+                            // Update last processed time
+                            last_processed.insert(path.clone(), now);
+                            
+                            // Send individual file update message
+                            if let Ok(content) = fs::read_to_string(path) {
+                                let memos = parse_memo(&content);
+                                
+                                let file_update_msg = serde_json::json!({
+                                    "type": "file_updated",
+                                    "file_path": path.to_string_lossy(),
+                                    "path": path.file_name().and_then(|n| n.to_str()).unwrap_or(""),
+                                    "memos": memos
+                                });
+                                
+                                broadcast_to_clients(&clients, file_update_msg);
+                                println!("Sent file update for: {}", path.display());
                             }
                         }
                     }

@@ -20,7 +20,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     <div className={`file-explorer ${className}`}>
       <div className="file-explorer-header">
         <h3 className="file-explorer-title">
-          📁 {directoryStructure.path}
+          📁 Files
         </h3>
       </div>
       <div className="file-explorer-content">

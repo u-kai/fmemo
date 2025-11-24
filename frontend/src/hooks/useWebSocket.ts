@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface WebSocketMessage {
-  type: 'reload' | 'update' | 'file_updated';
+  type: 'reload' | 'update' | 'file_updated' | 'directory_updated';
   path?: string;
+  file_path?: string;
   html?: string;
   memos?: any[];
+  tree?: any;
 }
 
 export const useWebSocket = (url: string = 'ws://localhost:3030/ws') => {
@@ -65,7 +67,7 @@ export const useWebSocket = (url: string = 'ws://localhost:3030/ws') => {
       console.error('Failed to create WebSocket connection:', err);
       setError('Failed to create WebSocket connection');
     }
-  }, [url]);
+  }, []);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -93,9 +95,10 @@ export const useWebSocket = (url: string = 'ws://localhost:3030/ws') => {
     connect();
     
     return () => {
+      console.log('useWebSocket cleanup - disconnecting');
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, []);
 
   return {
     isConnected,

@@ -6,6 +6,7 @@ export interface CodeBlock {
 export interface FunctionMemo {
   level: number;
   title: string;
+  description?: string;
   content: string;
   codeBlocks: CodeBlock[];
   children: FunctionMemo[];
@@ -18,8 +19,8 @@ export interface ZoomState {
 }
 
 export interface ViewMode {
-  mode: 'memo' | 'flow';
-  layout: 'vertical' | 'horizontal';
+  mode: "memo" | "flow";
+  layout: "vertical" | "horizontal";
 }
 
 export interface FlowNode {
@@ -33,7 +34,7 @@ export interface FlowNode {
 export interface FileItem {
   name: string;
   path: string;
-  type: 'file' | 'directory';
+  type: "file" | "directory";
   extension?: string;
   children?: FileItem[];
 }
@@ -42,3 +43,4 @@ export interface DirectoryStructure {
   path: string;
   items: FileItem[];
 }
+

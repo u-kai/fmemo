@@ -1,0 +1,6 @@
+- フロントエンドの起動とともに/api/rootにアクセスして、Directory構造を取得
+- Directory構造をもとにFileExplorerを表示
+- ユーザーがFileExplorer上でファイルを選択したら、そのパスをもとにapiを叩いて、fileのMemo配列を取得
+- 取得したMemo配列をもとにMemoViewerで表示
+- できれば取得ずみのMemoはキャッシュしておく
+- wsも使って、ファイルの変更を検知したら自動で再取得して表示を更新する
