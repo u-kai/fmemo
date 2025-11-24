@@ -1,3 +1,4 @@
+import React from 'react';
 import { Button } from '../common/Button/Button';
 import type { ViewMode, ZoomState } from '../../types';
 import './ZoomControls.css';

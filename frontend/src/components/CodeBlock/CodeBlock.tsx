@@ -1,3 +1,4 @@
+import React from 'react';
 import type { CodeBlock as CodeBlockType } from '../../types';
 import './CodeBlock.css';
 

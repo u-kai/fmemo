@@ -29,3 +29,16 @@ export interface FlowNode {
   path?: string;
   children: FlowNode[];
 }
+
+export interface FileItem {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  extension?: string;
+  children?: FileItem[];
+}
+
+export interface DirectoryStructure {
+  path: string;
+  items: FileItem[];
+}

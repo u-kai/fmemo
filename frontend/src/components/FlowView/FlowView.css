@@ -1,0 +1,144 @@
+.flow-view {
+  padding: 40px 20px;
+  width: max-content;
+  min-height: 100vh;
+  position: relative;
+}
+
+.flow-diagram-container {
+  position: relative;
+  padding: 20px;
+}
+
+.flow-tree-node {
+  margin: 20px 0;
+}
+
+.siblings-flow {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+  margin: 20px 0;
+}
+
+.flow-tree-node.top-level {
+  margin: 0 40px 60px 40px;
+}
+
+.children-flow {
+  margin-top: 40px;
+  margin-left: 40px;
+}
+
+.flow-node {
+  display: inline-block;
+  background: white;
+  border: 3px solid;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-family: monospace;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  min-width: 100px;
+  max-width: 250px;
+  width: fit-content;
+  text-align: center;
+  position: relative;
+  margin: 10px;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.flow-node-title {
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.flow-node-description {
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
+  line-height: 1.2;
+  margin-top: 4px;
+  opacity: 0.8;
+}
+
+.flow-node-path {
+  font-size: 10px;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-top: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+.flow-node:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* Level-specific colors */
+.flow-node.level-1 {
+  border-color: #e74c3c;
+  background: #fdf2f2;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.flow-node.level-2 {
+  border-color: #3498db;
+  background: #f0f8ff;
+  font-size: 15px;
+}
+
+.flow-node.level-3 {
+  border-color: #2ecc71;
+  background: #f0fff4;
+}
+
+.flow-node.level-4 {
+  border-color: #f39c12;
+  background: #fffaf0;
+}
+
+.flow-node.level-5 {
+  border-color: #9b59b6;
+  background: #f8f5ff;
+}
+
+.flow-node.level-6,
+.flow-node.level-7,
+.flow-node.level-8 {
+  border-color: #95a5a6;
+  background: #f8f9fa;
+  font-size: 12px;
+}
+
+/* Connection lines */
+.flow-connection-line {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.flow-arrow {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* View mode management */
+.view-mode {
+  display: none;
+}
+
+.view-mode.active {
+  display: block;
+}

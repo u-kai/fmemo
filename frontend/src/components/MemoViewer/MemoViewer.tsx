@@ -1,3 +1,4 @@
+import React from 'react';
 import type { FunctionMemo, ViewMode } from '../../types';
 import { MemoContainer } from '../MemoContainer/MemoContainer';
 import './MemoViewer.css';

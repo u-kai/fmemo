@@ -1,0 +1,124 @@
+.file-explorer {
+  background: white;
+  border: 1px solid #e1e5e9;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  min-width: 280px;
+  max-width: 400px;
+  height: fit-content;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-explorer-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e1e5e9;
+  background: #f8f9fa;
+  border-radius: 8px 8px 0 0;
+}
+
+.file-explorer-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #24292f;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-explorer-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.file-tree {
+  padding: 8px 0;
+}
+
+.file-tree-item {
+  user-select: none;
+}
+
+.file-tree-item-content {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: background-color 0.15s ease;
+  min-height: 24px;
+}
+
+.file-tree-item-content:hover {
+  background-color: #f6f8fa;
+}
+
+.file-tree-item-content.selected {
+  background-color: #0969da;
+  color: white;
+}
+
+.file-tree-item-content.directory {
+  font-weight: 500;
+}
+
+.expand-arrow {
+  margin-right: 4px;
+  font-size: 10px;
+  color: #656d76;
+  transition: transform 0.2s ease;
+  width: 12px;
+  display: inline-block;
+}
+
+.expand-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.file-icon {
+  margin-right: 6px;
+  font-size: 14px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tree-children {
+  border-left: 1px solid #d1d9e0;
+  margin-left: 12px;
+}
+
+/* File type specific styling */
+.file-tree-item-content[data-extension=".md"] .file-name {
+  color: #0969da;
+}
+
+.file-tree-item-content[data-extension=".rs"] .file-name {
+  color: #ce422b;
+}
+
+.file-tree-item-content[data-extension=".ts"] .file-name,
+.file-tree-item-content[data-extension=".tsx"] .file-name {
+  color: #3178c6;
+}
+
+.file-tree-item-content[data-extension=".js"] .file-name,
+.file-tree-item-content[data-extension=".jsx"] .file-name {
+  color: #f7df1e;
+}
+
+.file-tree-item-content.selected .file-name {
+  color: inherit;
+}
