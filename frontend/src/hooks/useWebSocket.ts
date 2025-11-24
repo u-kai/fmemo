@@ -9,7 +9,19 @@ interface WebSocketMessage {
   tree?: any;
 }
 
-export const useWebSocket = (url: string = 'ws://localhost:3030/ws') => {
+// Determine sensible default WS URL
+const defaultWsUrl = (() => {
+  // Allow override via env
+  const envUrl = (import.meta as any)?.env?.VITE_WS_URL as string | undefined;
+  if (envUrl) return envUrl;
+  // In dev, default to backend port 3030
+  if ((import.meta as any)?.env?.DEV) return 'ws://localhost:3030/ws';
+  // In production (served by the same server), use current host
+  if (typeof window !== 'undefined') return `ws://${window.location.host}/ws`;
+  return 'ws://localhost:3030/ws';
+})();
+
+export const useWebSocket = (url: string = defaultWsUrl) => {
   const [isConnected, setIsConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
   const [error, setError] = useState<string | null>(null);

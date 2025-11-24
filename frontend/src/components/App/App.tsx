@@ -42,6 +42,30 @@ export const App: React.FC = () => {
   });
   const { zoomState, zoomIn, zoomOut, resetZoom, fitToScreen } = useZoom();
 
+  // Keyboard shortcuts for zoom controls (Ctrl/Cmd + '+', '-', '0')
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isModifier = e.ctrlKey || e.metaKey;
+      if (!isModifier) return;
+
+      // Normalize key for different layouts
+      const key = e.key;
+      if (key === "+" || key === "=" ) {
+        e.preventDefault();
+        zoomIn();
+      } else if (key === "-" || key === "_") {
+        e.preventDefault();
+        zoomOut();
+      } else if (key === "0") {
+        e.preventDefault();
+        resetZoom();
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [zoomIn, zoomOut, resetZoom]);
+
   const handleFileSelect = async (filePath: string) => {
     console.log("[App] File selected:", filePath);
     setSelectedFile(filePath);
@@ -292,6 +316,8 @@ export const App: React.FC = () => {
             transform: `translate(${zoomState.panX}px, ${zoomState.panY}px) scale(${zoomState.zoom})`,
             transformOrigin: "0 0",
             transition: "transform 0.2s ease-out",
+            width: "max-content",
+            minHeight: "max-content",
           }}
         >
           <MemoViewer memos={memos} viewMode={viewMode} />
@@ -308,4 +334,3 @@ export const App: React.FC = () => {
     </div>
   );
 };
-

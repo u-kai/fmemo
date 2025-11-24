@@ -4,6 +4,8 @@
 
 .view-mode.active {
   display: block;
+  padding: 0;
+  text-align: left;
 }
 
 .horizontal-layout {

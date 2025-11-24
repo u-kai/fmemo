@@ -39,10 +39,11 @@
   min-width: max-content;
   min-height: max-content;
   width: max-content;
-  padding: 20px;
+  padding: 0;
   position: absolute;
   top: 0;
   left: 0;
+  text-align: left;
 }
 
 .app-loading {

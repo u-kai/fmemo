@@ -193,13 +193,17 @@ pub fn create_api_routes(
     };
 
     // Add compatibility route for frontend API client
+    // Support nested paths for files (e.g., sub/dir/file.fmemo)
     let file_route = {
         let root_dir = root_dir.clone();
-        warp::path!("api" / "file" / String)
+        warp::path("api")
+            .and(warp::path("file"))
+            .and(warp::path::tail())
             .and(warp::get())
-            .map(move |filename: String| {
+            .map(move |tail: warp::path::Tail| {
+                let filename = tail.as_str();
                 let file_path = root_dir.join(&filename);
-                
+
                 match read_fmemo_file(&file_path) {
                     Ok(content) => {
                         // Transform to frontend expected format
@@ -433,6 +437,33 @@ pub fn start_directory_watcher<P: AsRef<Path>>(
                                 broadcast_to_clients(&clients, file_update_msg);
                                 println!("Sent file update for: {}", path.display());
                             }
+                        }
+                    }
+
+                    // If structure changed (create/remove/rename), broadcast directory update
+                    if matches!(event.kind,
+                        EventKind::Create(_) |
+                        EventKind::Remove(_) |
+                        EventKind::Modify(notify::event::ModifyKind::Name(_))
+                    ) {
+                        if let Ok(tree) = scan_directory(&root_path) {
+                            // Transform to frontend expected format
+                            let response = serde_json::json!({
+                                "files": tree.files,
+                                "directories": tree.subdirectories.iter().map(|subdir| {
+                                    std::path::Path::new(&subdir.path)
+                                        .file_name()
+                                        .and_then(|name| name.to_str())
+                                        .unwrap_or(&subdir.path)
+                                }).collect::<Vec<_>>()
+                            });
+
+                            let dir_msg = serde_json::json!({
+                                "type": "directory_updated",
+                                "tree": response
+                            });
+                            broadcast_to_clients(&clients, dir_msg);
+                            println!("Sent directory update for root: {}", root_path.display());
                         }
                     }
                 }

@@ -1,5 +1,5 @@
 .flow-view {
-  padding: 40px 20px;
+  padding: 20px 20px 40px 0; /* remove left padding to start at left edge */
   width: max-content;
   min-height: 100vh;
   position: relative;
@@ -7,7 +7,7 @@
 
 .flow-diagram-container {
   position: relative;
-  padding: 20px;
+  padding: 20px 20px 20px 0; /* no left padding */
 }
 
 .flow-tree-node {
@@ -22,7 +22,7 @@
 }
 
 .flow-tree-node.top-level {
-  margin: 0 40px 60px 40px;
+  margin: 0 40px 60px 0; /* no left margin for root */
 }
 
 .children-flow {
@@ -64,6 +64,7 @@
   line-height: 1.2;
   margin-top: 4px;
   opacity: 0.8;
+  text-align: left; /* ensure description is left-aligned */
 }
 
 .flow-node-path {
@@ -132,6 +133,14 @@
   position: absolute;
   z-index: 2;
   pointer-events: none;
+}
+
+/* SVG overlay for connectors */
+.flow-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0; /* behind nodes */
 }
 
 /* View mode management */

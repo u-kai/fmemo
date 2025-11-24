@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FunctionMemo, FlowNode as FlowNodeType } from "../../types";
 import { FlowNode } from "./FlowNode";
 import "./FlowView.css";
@@ -7,29 +7,67 @@ interface FlowViewProps {
   memos: FunctionMemo[];
   onNodeClick?: (node: FlowNodeType) => void;
   className?: string;
+  // Current zoom level applied to container (1.0 means no scaling)
+  zoom?: number;
 }
 
 export const FlowView: React.FC<FlowViewProps> = ({
   memos,
   onNodeClick,
   className = "",
+  zoom = 1.0,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const flowNodes = convertMemosToFlowNodes(memos);
+  const [connectors, setConnectors] = useState<Connector[]>([]);
 
-  useEffect(() => {
-    // Add connecting lines after component mounts
-    const timer = setTimeout(() => {
-      if (containerRef.current) {
-        addConnectingLines(containerRef.current);
-      }
-    }, 100);
-
-    return () => clearTimeout(timer);
+  // Compute connectors and SVG size before paint
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setConnectors(computeConnectors(el));
   }, [memos]);
+
+  // Recompute on resize
+  useEffect(() => {
+    const handleResize = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      setConnectors(computeConnectors(el));
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   return (
     <div id="flow-view" className={`flow-view ${className}`} ref={containerRef}>
+      <svg
+        className="flow-svg"
+        width="100%"
+        height="100%"
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'visible' }}
+      >
+        <defs>
+          <marker id="arrow-dark" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="strokeWidth" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#34495e" />
+          </marker>
+          <marker id="arrow-light" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="strokeWidth" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#95a5a6" />
+          </marker>
+        </defs>
+        {connectors.map((c, i) => (
+          <line
+            key={i}
+            x1={c.x1}
+            y1={c.y1}
+            x2={c.x2}
+            y2={c.y2}
+            stroke={c.type === 'vertical' ? '#34495e' : '#95a5a6'}
+            strokeWidth={2}
+            markerEnd={c.arrow === 'dark' ? 'url(#arrow-dark)' : c.arrow === 'light' ? 'url(#arrow-light)' : undefined}
+          />
+        ))}
+      </svg>
       <div className="flow-diagram-container">
         {renderHierarchicalFlow(flowNodes, 0, onNodeClick)}
       </div>
@@ -103,138 +141,57 @@ function renderHierarchicalFlow(
   );
 }
 
-function addConnectingLines(container: HTMLElement) {
-  // Remove existing lines
-  container
-    .querySelectorAll(".flow-connection-line")
-    .forEach((line) => line.remove());
+type Connector = { type: 'vertical' | 'horizontal'; x1: number; y1: number; x2: number; y2: number; arrow?: 'dark' | 'light' };
 
-  // Add parent-child lines (vertical)
+function computeConnectors(container: HTMLElement): Connector[] {
+  const connectors: Connector[] = [];
+  const containerRect = container.getBoundingClientRect();
+
+  // Parent-child vertical connectors
   container.querySelectorAll(".flow-tree-node").forEach((treeNode) => {
-    const parentNode = treeNode.querySelector(
-      ":scope > .flow-node",
-    ) as HTMLElement;
-    const childrenFlow = treeNode.querySelector(
-      ":scope > .children-flow",
-    ) as HTMLElement;
+    const parentNode = treeNode.querySelector(":scope > .flow-node") as HTMLElement | null;
+    const childrenFlow = treeNode.querySelector(":scope > .children-flow") as HTMLElement | null;
+    if (!parentNode || !childrenFlow) return;
 
-    if (parentNode && childrenFlow) {
-      const childNodes = childrenFlow.querySelectorAll(
-        ":scope > .flow-tree-node > .flow-node, :scope > .siblings-flow > .flow-tree-node > .flow-node",
-      ) as NodeListOf<HTMLElement>;
+    const childNodes = childrenFlow.querySelectorAll(
+      ":scope > .flow-tree-node > .flow-node, :scope > .siblings-flow > .flow-tree-node > .flow-node",
+    ) as NodeListOf<HTMLElement>;
+    if (childNodes.length === 0) return;
 
-      if (childNodes.length > 0) {
-        childNodes.forEach((childNode) => {
-          createVerticalLine(container, parentNode, childNode);
-        });
-      }
-    }
+    childNodes.forEach((childNode, index) => {
+      const parentRect = parentNode.getBoundingClientRect();
+      const childRect = childNode.getBoundingClientRect();
+      const x = parentRect.left + parentRect.width / 2 - containerRect.left;
+      const y1 = parentRect.bottom - containerRect.top;
+      const y2 = childRect.top - containerRect.top;
+      connectors.push({ type: 'vertical', x1: x, y1, x2: x, y2, arrow: index === 0 ? 'dark' : undefined });
+    });
   });
 
-  // Add sibling lines (horizontal) - skip level 1 siblings
+  // Sibling horizontal connectors (skip level-1 siblings)
   container.querySelectorAll(".siblings-flow").forEach((siblingsContainer) => {
     const siblingNodes = siblingsContainer.querySelectorAll(
       ":scope > .flow-tree-node > .flow-node",
     ) as NodeListOf<HTMLElement>;
+    if (siblingNodes.length < 2) return;
 
-    // Check if any of the siblings are level-1 (top level)
     let hasLevel1 = false;
     siblingNodes.forEach((node) => {
-      if (node.classList.contains("level-1")) {
-        hasLevel1 = true;
-      }
+      if (node.classList.contains("level-1")) hasLevel1 = true;
     });
+    if (hasLevel1) return;
 
-    // Only add horizontal lines if not level-1 siblings
-    if (!hasLevel1) {
-      for (let i = 0; i < siblingNodes.length - 1; i++) {
-        createHorizontalLine(container, siblingNodes[i], siblingNodes[i + 1]);
-      }
+    for (let i = 0; i < siblingNodes.length - 1; i++) {
+      const leftRect = siblingNodes[i].getBoundingClientRect();
+      const rightRect = siblingNodes[i + 1].getBoundingClientRect();
+      const startX = leftRect.right - containerRect.left;
+      const endX = rightRect.left - containerRect.left;
+      const y = leftRect.top + leftRect.height / 2 - containerRect.top;
+      connectors.push({ type: 'horizontal', x1: startX, y1: y, x2: endX, y2: y, arrow: 'light' });
     }
   });
+
+  return connectors;
 }
 
-function createVerticalLine(
-  container: HTMLElement,
-  parentNode: HTMLElement,
-  childNode: HTMLElement,
-) {
-  const parentRect = parentNode.getBoundingClientRect();
-  const childRect = childNode.getBoundingClientRect();
-  const containerRect = container.getBoundingClientRect();
-
-  const line = document.createElement("div");
-  line.className = "flow-connection-line vertical-line";
-
-  const startX = parentRect.left + parentRect.width / 2 - containerRect.left;
-  const startY = parentRect.bottom - containerRect.top;
-  const endY = childRect.top - containerRect.top;
-
-  line.style.position = "absolute";
-  line.style.left = `${startX - 1}px`;
-  line.style.top = `${startY}px`;
-  line.style.width = "2px";
-  line.style.height = `${endY - startY}px`;
-  line.style.background = "#34495e";
-  line.style.zIndex = "1";
-
-  container.appendChild(line);
-
-  // Add arrow at the end
-  const arrow = document.createElement("div");
-  arrow.className = "flow-arrow down-arrow";
-  arrow.style.position = "absolute";
-  arrow.style.left = `${startX - 6}px`;
-  arrow.style.top = `${endY - 10}px`;
-  arrow.style.width = "0";
-  arrow.style.height = "0";
-  arrow.style.borderLeft = "6px solid transparent";
-  arrow.style.borderRight = "6px solid transparent";
-  arrow.style.borderTop = "10px solid #34495e";
-  arrow.style.zIndex = "2";
-
-  container.appendChild(arrow);
-}
-
-function createHorizontalLine(
-  container: HTMLElement,
-  leftNode: HTMLElement,
-  rightNode: HTMLElement,
-) {
-  const leftRect = leftNode.getBoundingClientRect();
-  const rightRect = rightNode.getBoundingClientRect();
-  const containerRect = container.getBoundingClientRect();
-
-  const line = document.createElement("div");
-  line.className = "flow-connection-line horizontal-line";
-
-  const startX = leftRect.right - containerRect.left;
-  const endX = rightRect.left - containerRect.left;
-  const y = leftRect.top + leftRect.height / 2 - containerRect.top;
-
-  line.style.position = "absolute";
-  line.style.left = `${startX}px`;
-  line.style.top = `${y - 1}px`;
-  line.style.width = `${endX - startX}px`;
-  line.style.height = "2px";
-  line.style.background = "#95a5a6";
-  line.style.zIndex = "1";
-
-  container.appendChild(line);
-
-  // Add arrow at the end
-  const arrow = document.createElement("div");
-  arrow.className = "flow-arrow right-arrow";
-  arrow.style.position = "absolute";
-  arrow.style.left = `${endX - 10}px`;
-  arrow.style.top = `${y - 6}px`;
-  arrow.style.width = "0";
-  arrow.style.height = "0";
-  arrow.style.borderTop = "6px solid transparent";
-  arrow.style.borderBottom = "6px solid transparent";
-  arrow.style.borderLeft = "10px solid #95a5a6";
-  arrow.style.zIndex = "2";
-
-  container.appendChild(arrow);
-}
-
+// Switched to SVG overlay; DOM-based line drawing removed.

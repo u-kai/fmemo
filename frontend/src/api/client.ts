@@ -18,6 +18,7 @@ export interface ApiFileContent {
 
 export class ApiClient {
   private baseUrl: string;
+  private lastRootPath: string | null = null;
 
   constructor(baseUrl: string = '') {
     // In development (Vite dev server), use relative URLs that get proxied
@@ -46,19 +47,30 @@ export class ApiClient {
 
   async getFileContent(filePath: string): Promise<ApiResponse<ApiFileContent>> {
     try {
-      // Extract filename from full path for API call
-      // Server expects just the filename, not the full path
-      const filename = filePath.includes('/') ? filePath.split('/').pop() : filePath;
-      console.log(`[ApiClient] Calling API with filename: ${filename} (from path: ${filePath})`);
+      // Compute path relative to root if possible (server expects path relative to configured root)
+      let relativePath = filePath;
+      if (this.lastRootPath && filePath.startsWith(this.lastRootPath)) {
+        relativePath = filePath.slice(this.lastRootPath.length);
+        if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
+      } else {
+        // Fallback to basename
+        relativePath = filePath.includes('/') ? (filePath.split('/').pop() || filePath) : filePath;
+      }
+      console.log(`[ApiClient] Calling API with path: ${relativePath} (from: ${filePath})`);
       
-      const response = await fetch(`${this.baseUrl}/api/file/${encodeURIComponent(filename || filePath)}`);
+      const response = await fetch(`${this.baseUrl}/api/file/${encodeURIComponent(relativePath)}`);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      const data = await response.json();
-      console.log(`[ApiClient] Received response:`, data);
+      const raw = await response.json();
+      console.log(`[ApiClient] Received response:`, raw);
+      const data = {
+        path: raw.path,
+        content: raw.content,
+        memos: this.transformApiMemos(raw.memos || [])
+      };
       return { data };
     } catch (error) {
       console.error(`[ApiClient] Error fetching file:`, error);
@@ -69,11 +81,46 @@ export class ApiClient {
     }
   }
 
+  // Transform backend snake_case and Level representation to frontend camelCase + numeric levels starting at 1
+  private transformApiMemos(memos: any[]): FunctionMemo[] {
+    const normLevel = (lvl: any): number => {
+      if (typeof lvl === 'number') return Math.max(1, lvl + 1);
+      if (Array.isArray(lvl) && lvl.length > 0 && typeof lvl[0] === 'number') return Math.max(1, lvl[0] + 1);
+      if (lvl && typeof lvl === 'object') {
+        // tuple struct may serialize as {"0": n}
+        if (typeof (lvl as any)[0] === 'number') return Math.max(1, ((lvl as any)[0] as number) + 1);
+        if (typeof (lvl as any).level === 'number') return Math.max(1, ((lvl as any).level as number) + 1);
+      }
+      return 1;
+    };
+
+    const toMemo = (m: any): FunctionMemo => {
+      const children = Array.isArray(m.children) ? m.children.map(toMemo) : [];
+      const codeBlocksSrc = m.codeBlocks || m.code_blocks || [];
+      const codeBlocks = codeBlocksSrc.map((cb: any) => ({
+        language: cb.language,
+        code: cb.code,
+      }));
+      return {
+        level: normLevel(m.level),
+        title: m.title || '',
+        description: m.description ?? undefined,
+        content: m.content || '',
+        codeBlocks,
+        children,
+      };
+    };
+
+    return memos.map(toMemo);
+  }
+
   // Convert API response to frontend types
   convertToDirectoryStructure(
     apiData: ApiDirectoryTree, 
     currentPath: string = '/Users/kai/refactor-fmemo'
   ): DirectoryStructure {
+    // Remember last root/current path for relative file path computation
+    this.lastRootPath = currentPath;
     const items: FileItem[] = [];
 
     // Add directories
