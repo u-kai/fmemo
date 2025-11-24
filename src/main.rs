@@ -1,11 +1,11 @@
+use clap::{Arg, Command};
+use futures_util::{SinkExt, StreamExt};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::fs;
-use notify::{RecommendedWatcher, Watcher, RecursiveMode};
 use std::sync::mpsc::channel;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use warp::Filter;
-use futures_util::{SinkExt, StreamExt};
-use std::sync::{Arc, Mutex};
-use clap::{Arg, Command};
 
 #[derive(Debug, Clone)]
 struct FunctionMemo {
@@ -67,10 +67,10 @@ impl MarkdownParser {
                 if let Some(memo) = current_memo.take() {
                     memos.push(memo);
                 }
-                
+
                 let level = line.chars().take_while(|&c| c == '#').count() as u8;
                 let title = line[level as usize..].trim().to_string();
-                
+
                 current_memo = Some(FunctionMemo {
                     level,
                     title,
@@ -88,11 +88,11 @@ impl MarkdownParser {
                 }
             }
         }
-        
+
         if let Some(memo) = current_memo {
             memos.push(memo);
         }
-        
+
         memos
     }
 
@@ -113,7 +113,7 @@ impl MarkdownParser {
                     root_memos.push(completed);
                 }
             }
-            
+
             stack.push(memo);
         }
 
@@ -134,7 +134,8 @@ struct HtmlGenerator;
 
 impl HtmlGenerator {
     fn generate(memos: &[FunctionMemo], port: u16, is_horizontal: bool) -> String {
-        let mut html = format!(r#"
+        let mut html = format!(
+            r#"
 <!DOCTYPE html>
 <html>
 <head>
@@ -601,8 +602,10 @@ impl HtmlGenerator {
                     generateFlowDiagram();
                 }}, 10);
             }}
-        }}"#, port);
-        
+        }}"#,
+            port
+        );
+
         html.push_str("
         function toggleMemo(element) {
             const container = element.parentElement;
@@ -1215,10 +1218,15 @@ impl HtmlGenerator {
     </script>
 </head>
 <body class=\"");
-        html.push_str(if is_horizontal { "horizontal-layout" } else { "" });
+        html.push_str(if is_horizontal {
+            "horizontal-layout"
+        } else {
+            ""
+        });
         html.push_str("\">");
-        
-        html.push_str(r#"
+
+        html.push_str(
+            r#"
 <div id="zoom-controls">
     <button class="zoom-btn" onclick="zoomOut()">−</button>
     <span id="zoom-level">100%</span>
@@ -1231,7 +1239,8 @@ impl HtmlGenerator {
 </div>
 <div id="zoom-container">
     <div id="memo-view" class="view-mode active">
-"#);
+"#,
+        );
 
         if is_horizontal {
             Self::generate_horizontal_layout(&mut html, memos);
@@ -1258,13 +1267,13 @@ impl HtmlGenerator {
         let level_class = format!("level-{}", memo.level.min(8));
         let has_children = !memo.children.is_empty();
         let no_children_class = if has_children { "" } else { " no-children" };
-        
+
         // Start container
         html.push_str("<div class=\"memo-container ");
         html.push_str(&level_class);
         html.push_str(no_children_class);
         html.push_str("\">");
-        
+
         // Header
         html.push_str("<div class=\"memo-header\" onclick=\"toggleMemo(this)\">");
         html.push_str("<div class=\"memo-title-container\">");
@@ -1287,7 +1296,10 @@ impl HtmlGenerator {
             for code_block in &memo.code_blocks {
                 html.push_str("<div class=\"code-block\">");
                 if !code_block.language.is_empty() {
-                    html.push_str(&format!("<div class=\"code-language\">{}</div>", Self::escape_html(&code_block.language)));
+                    html.push_str(&format!(
+                        "<div class=\"code-language\">{}</div>",
+                        Self::escape_html(&code_block.language)
+                    ));
                 }
                 html.push_str("<pre><code>");
                 html.push_str(&Self::escape_html(&code_block.code));
@@ -1322,13 +1334,13 @@ impl HtmlGenerator {
         let level_class = format!("level-{}", memo.level.min(8));
         let has_children = !memo.children.is_empty();
         let no_children_class = if has_children { "" } else { " no-children" };
-        
+
         // Start container
         html.push_str("<div class=\"memo-container ");
         html.push_str(&level_class);
         html.push_str(no_children_class);
         html.push_str("\">");
-        
+
         // Header
         html.push_str("<div class=\"memo-header\" onclick=\"toggleMemo(this)\">");
         html.push_str("<div class=\"memo-title-container\">");
@@ -1384,7 +1396,7 @@ impl HtmlGenerator {
         for line in text.lines() {
             let leading_spaces = line.len() - line.trim_start().len();
             let trimmed = line.trim();
-            
+
             if trimmed.starts_with("- ") {
                 // 段落があれば閉じる
                 if !current_paragraph.trim().is_empty() {
@@ -1393,21 +1405,25 @@ impl HtmlGenerator {
                 }
 
                 let current_level = leading_spaces;
-                
+
                 // リストレベルの調整
                 while !list_levels.is_empty() && list_levels.last().unwrap() >= &current_level {
                     list_levels.pop();
                     html.push_str("</ul>\n");
                 }
-                
+
                 if list_levels.is_empty() || list_levels.last().unwrap() < &current_level {
                     list_levels.push(current_level);
                     html.push_str("<ul>\n");
                 }
-                
+
                 let item_text = &trimmed[2..]; // "- " を除去
                 let indent = "  ".repeat(list_levels.len());
-                html.push_str(&format!("{}<li>{}</li>\n", indent, Self::escape_html(item_text)));
+                html.push_str(&format!(
+                    "{}<li>{}</li>\n",
+                    indent,
+                    Self::escape_html(item_text)
+                ));
             } else if trimmed.is_empty() {
                 // 空行の処理
                 while !list_levels.is_empty() {
@@ -1455,7 +1471,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("file")
                 .value_name("FILE")
                 .help("Markdown file to watch")
-                .required(true)
+                .required(true),
         )
         .arg(
             Arg::new("port")
@@ -1463,7 +1479,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("port")
                 .value_name("PORT")
                 .help("Port to serve on")
-                .default_value("3030")
+                .default_value("3030"),
         )
         .arg(
             Arg::new("layout")
@@ -1472,12 +1488,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .value_name("LAYOUT")
                 .help("Layout mode: vertical (default) or horizontal")
                 .default_value("vertical")
-                .value_parser(["vertical", "horizontal"])
+                .value_parser(["vertical", "horizontal"]),
         )
         .get_matches();
 
     let file_path = matches.get_one::<String>("file").unwrap();
-    let port: u16 = matches.get_one::<String>("port").unwrap().parse()
+    let port: u16 = matches
+        .get_one::<String>("port")
+        .unwrap()
+        .parse()
         .expect("Port must be a valid number");
     let layout = matches.get_one::<String>("layout").unwrap();
     let is_horizontal = layout == "horizontal";
@@ -1495,7 +1514,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())?;
     watcher.watch(std::path::Path::new(file_path), RecursiveMode::NonRecursive)?;
 
-    let websocket_clients: Arc<Mutex<Vec<tokio::sync::mpsc::UnboundedSender<warp::ws::Message>>>> = Arc::new(Mutex::new(Vec::new()));
+    let websocket_clients: Arc<Mutex<Vec<tokio::sync::mpsc::UnboundedSender<warp::ws::Message>>>> =
+        Arc::new(Mutex::new(Vec::new()));
     let websocket_clients_clone = Arc::clone(&websocket_clients);
 
     let file_path_clone = file_path.clone();
@@ -1509,7 +1529,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let parser = MarkdownParser::new(content);
                         let memos = parser.parse();
                         let html = HtmlGenerator::generate(&memos, port_clone, is_horizontal_clone);
-                        
+
                         {
                             let mut html_guard = html_content_clone.lock().unwrap();
                             *html_guard = html;
@@ -1525,7 +1545,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             content.push_str("</div>");
                             content
                         } else {
-                            memos.iter()
+                            memos
+                                .iter()
                                 .map(|memo| {
                                     let mut memo_html = String::new();
                                     HtmlGenerator::generate_memo(&mut memo_html, memo);
@@ -1534,12 +1555,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 .collect::<Vec<String>>()
                                 .join("")
                         };
-                        
+
                         let update_msg = serde_json::json!({
                             "type": "update",
                             "html": format!("<body><div id=\"memo-view\" class=\"view-mode active\">{}</div></body>", memo_content)
                         });
-                        
+
                         for client in clients.iter() {
                             let _ = client.send(warp::ws::Message::text(update_msg.to_string()));
                         }
@@ -1559,12 +1580,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let html_route = {
         let html_content = Arc::clone(&html_content);
-        warp::get()
-            .and(warp::path::end())
-            .map(move || {
-                let content = html_content.lock().unwrap().clone();
-                warp::reply::html(content)
-            })
+        warp::get().and(warp::path::end()).map(move || {
+            let content = html_content.lock().unwrap().clone();
+            warp::reply::html(content)
+        })
     };
 
     let websocket_route = warp::path("ws")
@@ -1573,7 +1592,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let clients = Arc::clone(&websocket_clients);
             ws.on_upgrade(move |websocket| async move {
                 let (mut ws_tx, mut ws_rx) = websocket.split();
-                
+
                 let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
                 clients.lock().unwrap().push(tx);
 
@@ -1604,10 +1623,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Server running on http://localhost:{}", port);
     println!("Watching file: {}", file_path);
-    
-    warp::serve(routes)
-        .run(([127, 0, 0, 1], port))
-        .await;
+
+    warp::serve(routes).run(([127, 0, 0, 1], port)).await;
 
     Ok(())
 }
