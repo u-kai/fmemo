@@ -40,31 +40,56 @@ export const App: React.FC = () => {
     lastMessage,
     wsError
   });
-  const { zoomState, zoomIn, zoomOut, resetZoom, fitToScreen } = useZoom();
+  const { zoomState, zoomIn, zoomOut, resetZoom, fitToScreen, zoomAtPoint } = useZoom();
 
-  // Keyboard shortcuts for zoom controls (Ctrl/Cmd + '+', '-', '0')
+  // Mouse wheel zoom (Ctrl+scroll) and keyboard shortcuts
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const isModifier = e.ctrlKey || e.metaKey;
-      if (!isModifier) return;
-
-      // Normalize key for different layouts
-      const key = e.key;
-      if (key === "+" || key === "=" ) {
-        e.preventDefault();
-        zoomIn();
-      } else if (key === "-" || key === "_") {
-        e.preventDefault();
-        zoomOut();
-      } else if (key === "0") {
-        e.preventDefault();
-        resetZoom();
+    const handleKeyboard = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        console.log('[App] Keyboard shortcut detected:', e.key);
+        switch(e.key) {
+          case '=':
+          case '+':
+            e.preventDefault();
+            console.log('[App] Zoom in triggered');
+            zoomIn();
+            break;
+          case '-':
+            e.preventDefault();
+            console.log('[App] Zoom out triggered');
+            zoomOut();
+            break;
+          case '0':
+            e.preventDefault();
+            console.log('[App] Reset zoom triggered');
+            resetZoom();
+            break;
+        }
       }
     };
 
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [zoomIn, zoomOut, resetZoom]);
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom mode
+        e.preventDefault();
+        console.log('[App] Ctrl+wheel zoom detected:', e.deltaY);
+        
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        const mouseX = e.clientX;
+        const mouseY = e.clientY;
+        
+        zoomAtPoint(delta, mouseX, mouseY);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyboard);
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    
+    return () => {
+      window.removeEventListener("keydown", handleKeyboard);
+      window.removeEventListener("wheel", handleWheel);
+    };
+  }, [zoomIn, zoomOut, resetZoom, zoomAtPoint]);
 
   const handleFileSelect = async (filePath: string) => {
     console.log("[App] File selected:", filePath);

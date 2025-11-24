@@ -46,12 +46,33 @@ export const useZoom = () => {
     }));
   }, []);
 
+  const zoomAtPoint = useCallback((factor: number, mouseX: number, mouseY: number) => {
+    setZoomState(prev => {
+      const newZoom = Math.max(Math.min(prev.zoom * factor, 5.0), 0.1);
+      
+      // Calculate the point under the mouse in the original coordinate system
+      const pointX = (mouseX - prev.panX) / prev.zoom;
+      const pointY = (mouseY - prev.panY) / prev.zoom;
+      
+      // Adjust pan so the point under the mouse stays in the same place
+      const newPanX = mouseX - pointX * newZoom;
+      const newPanY = mouseY - pointY * newZoom;
+      
+      return {
+        zoom: newZoom,
+        panX: newPanX,
+        panY: newPanY
+      };
+    });
+  }, []);
+
   return {
     zoomState,
     zoomIn,
     zoomOut,
     resetZoom,
     fitToScreen,
-    updatePan
+    updatePan,
+    zoomAtPoint
   };
 };

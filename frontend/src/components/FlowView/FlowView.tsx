@@ -21,11 +21,21 @@ export const FlowView: React.FC<FlowViewProps> = ({
   const flowNodes = convertMemosToFlowNodes(memos);
   const [connectors, setConnectors] = useState<Connector[]>([]);
 
+  // Helper: compute connectors after layout settles (next frames)
+  const scheduleCompute = (el: HTMLElement) => {
+    // Run after 2 RAFs to ensure styles/fonts/layout applied
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setConnectors(computeConnectors(el));
+      });
+    });
+  };
+
   // Compute connectors and SVG size before paint
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    setConnectors(computeConnectors(el));
+    scheduleCompute(el);
   }, [memos]);
 
   // Recompute on resize
@@ -33,10 +43,31 @@ export const FlowView: React.FC<FlowViewProps> = ({
     const handleResize = () => {
       const el = containerRef.current;
       if (!el) return;
-      setConnectors(computeConnectors(el));
+      scheduleCompute(el);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Recompute on zoom changes to sync with any transform transition
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    scheduleCompute(el);
+  }, [zoom]);
+
+  // Observe size/content changes within the flow container
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const resizeObserver = new ResizeObserver(() => scheduleCompute(el));
+    const mutationObserver = new MutationObserver(() => scheduleCompute(el));
+    resizeObserver.observe(el);
+    mutationObserver.observe(el, { childList: true, subtree: true });
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
   }, []);
 
   return (
