@@ -20,12 +20,16 @@ export const FlowView: React.FC<FlowViewProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const flowNodes = convertMemosToFlowNodes(memos);
   const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [svgSize, setSvgSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
 
   // Helper: compute connectors after layout settles (next frames)
   const scheduleCompute = (el: HTMLElement) => {
     // Run after 2 RAFs to ensure styles/fonts/layout applied
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        if (!el.isConnected) return;
+        // Update SVG size to cover entire content, not just viewport
+        setSvgSize({ width: el.scrollWidth, height: el.scrollHeight });
         setConnectors(computeConnectors(el));
       });
     });
@@ -49,13 +53,6 @@ export const FlowView: React.FC<FlowViewProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Recompute on zoom changes to sync with any transform transition
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    scheduleCompute(el);
-  }, [zoom]);
-
   // Observe size/content changes within the flow container
   useEffect(() => {
     const el = containerRef.current;
@@ -74,8 +71,8 @@ export const FlowView: React.FC<FlowViewProps> = ({
     <div id="flow-view" className={`flow-view ${className}`} ref={containerRef}>
       <svg
         className="flow-svg"
-        width="100%"
-        height="100%"
+        width={svgSize.width}
+        height={svgSize.height}
         style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'visible' }}
       >
         <defs>
