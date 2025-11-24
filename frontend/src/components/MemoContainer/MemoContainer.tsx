@@ -17,6 +17,15 @@ export const MemoContainer: React.FC<MemoContainerProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
+  console.log('[MemoContainer] Rendering memo:', { 
+    title: memo.title, 
+    level: memo.level, 
+    hasCodeBlocks: !!memo.codeBlocks, 
+    codeBlocksLength: memo.codeBlocks?.length || 0,
+    hasChildren: !!memo.children,
+    childrenLength: memo.children?.length || 0
+  });
+  
   const handleToggle = () => {
     const newExpanded = !isExpanded;
     setIsExpanded(newExpanded);
@@ -24,7 +33,7 @@ export const MemoContainer: React.FC<MemoContainerProps> = ({
   };
 
   const levelClass = `level-${Math.min(memo.level, 8)}`;
-  const hasChildren = memo.children.length > 0;
+  const hasChildren = memo.children && memo.children.length > 0;
   const noChildrenClass = hasChildren ? '' : ' no-children';
 
   const renderContent = () => {
@@ -38,7 +47,7 @@ export const MemoContainer: React.FC<MemoContainerProps> = ({
   };
 
   const renderCodeBlocks = () => {
-    if (memo.codeBlocks.length === 0) return null;
+    if (!memo.codeBlocks || memo.codeBlocks.length === 0) return null;
     
     return (
       <div className="memo-body">
@@ -54,14 +63,14 @@ export const MemoContainer: React.FC<MemoContainerProps> = ({
 
     return (
       <div className={`children-container ${isExpanded ? 'expanded' : 'collapsed'}`}>
-        {memo.children.length > 1 && isHorizontal ? (
+        {memo.children && memo.children.length > 1 && isHorizontal ? (
           <div className="siblings-container">
             {memo.children.map((child, index) => (
               <MemoContainer key={index} memo={child} isHorizontal={isHorizontal} />
             ))}
           </div>
         ) : (
-          memo.children.map((child, index) => (
+          memo.children?.map((child, index) => (
             <MemoContainer key={index} memo={child} isHorizontal={isHorizontal} />
           ))
         )}

@@ -100,6 +100,33 @@ pub fn read_fmemo_file<P: AsRef<Path>>(file_path: P) -> std::io::Result<FileCont
     })
 }
 
+/// Create static file serving routes for React frontend
+pub fn create_static_routes(
+    dist_dir: PathBuf,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    // Serve static assets (CSS, JS, etc.)
+    let static_files = warp::path("assets")
+        .and(warp::fs::dir(dist_dir.join("assets")));
+    
+    // Serve favicon and other root files
+    let favicon = warp::path("favicon.ico")
+        .and(warp::fs::file(dist_dir.join("favicon.ico")));
+    
+    let vite_svg = warp::path("vite.svg")
+        .and(warp::fs::file(dist_dir.join("vite.svg")));
+    
+    // Catch all route for SPA - serve index.html for all non-API, non-WS routes
+    let spa_routes = warp::get()
+        .and(warp::path::full())
+        .and(warp::fs::file(dist_dir.join("index.html")))
+        .map(|_path: warp::path::FullPath, file| file);
+    
+    static_files
+        .or(favicon)
+        .or(vite_svg)
+        .or(spa_routes)
+}
+
 /// Create API routes
 pub fn create_api_routes(
     root_dir: PathBuf,
@@ -111,8 +138,18 @@ pub fn create_api_routes(
             .map(move || {
                 match scan_directory(&root_dir) {
                     Ok(tree) => {
+                        // Transform to frontend expected format
+                        let response = serde_json::json!({
+                            "files": tree.files,
+                            "directories": tree.subdirectories.iter().map(|subdir| {
+                                std::path::Path::new(&subdir.path)
+                                    .file_name()
+                                    .and_then(|name| name.to_str())
+                                    .unwrap_or(&subdir.path)
+                            }).collect::<Vec<_>>()
+                        });
                         warp::reply::with_status(
-                            warp::reply::json(&tree),
+                            warp::reply::json(&response),
                             warp::http::StatusCode::OK,
                         )
                     }
@@ -155,7 +192,76 @@ pub fn create_api_routes(
             })
     };
 
-    root_route.or(files_route)
+    // Add compatibility route for frontend API client
+    let file_route = {
+        let root_dir = root_dir.clone();
+        warp::path!("api" / "file" / String)
+            .and(warp::get())
+            .map(move |filename: String| {
+                let file_path = root_dir.join(&filename);
+                
+                match read_fmemo_file(&file_path) {
+                    Ok(content) => {
+                        // Transform to frontend expected format
+                        let response = serde_json::json!({
+                            "path": filename,
+                            "content": format!("# {}\n\nParsed from fmemo file", filename),
+                            "memos": content.memos
+                        });
+                        warp::reply::with_status(
+                            warp::reply::json(&response),
+                            warp::http::StatusCode::OK,
+                        )
+                    }
+                    Err(e) => {
+                        let error_msg = match e.kind() {
+                            std::io::ErrorKind::NotFound => "File not found",
+                            std::io::ErrorKind::InvalidInput => "Invalid file type (must be .fmemo)",
+                            _ => "Failed to read file",
+                        };
+                        warp::reply::with_status(
+                            warp::reply::json(&serde_json::json!({"error": error_msg})),
+                            warp::http::StatusCode::NOT_FOUND,
+                        )
+                    }
+                }
+            })
+    };
+
+    // Add CORS headers for API routes
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_headers(vec!["content-type"])
+        .allow_methods(vec!["GET", "POST", "PUT", "DELETE"]);
+
+    root_route
+        .or(files_route)
+        .or(file_route)
+        .with(cors)
+}
+
+/// Create full server routes (API + WebSocket + optionally static files)
+pub fn create_full_routes(
+    root_dir: PathBuf,
+    dist_dir: PathBuf,
+    clients: WebSocketClients,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let api_routes = create_api_routes(root_dir);
+    let ws_route = create_websocket_route(clients);
+    let static_routes = create_static_routes(dist_dir);
+    
+    api_routes.or(ws_route).or(static_routes)
+}
+
+/// Create API-only routes (API + WebSocket)
+pub fn create_api_only_routes(
+    root_dir: PathBuf,
+    clients: WebSocketClients,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let api_routes = create_api_routes(root_dir);
+    let ws_route = create_websocket_route(clients);
+    
+    api_routes.or(ws_route)
 }
 
 /// Create WebSocket route for real-time updates
@@ -495,10 +601,15 @@ More content here.
 
         assert_eq!(response.status(), 200);
         
-        let body: DirectoryTree = serde_json::from_slice(response.body()).unwrap();
-        assert_eq!(body.files.len(), 2);
-        assert!(body.files.contains(&"test1.fmemo".to_string()));
-        assert!(body.files.contains(&"test2.fmemo".to_string()));
+        let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        let files = body["files"].as_array().unwrap();
+        assert_eq!(files.len(), 2);
+        
+        let file_names: Vec<&str> = files.iter()
+            .map(|f| f.as_str().unwrap())
+            .collect();
+        assert!(file_names.contains(&"test1.fmemo"));
+        assert!(file_names.contains(&"test2.fmemo"));
     }
 
     #[tokio::test]
@@ -593,11 +704,13 @@ fn test() {}
 
         assert_eq!(response.status(), 200);
         
-        let body: DirectoryTree = serde_json::from_slice(response.body()).unwrap();
-        assert_eq!(body.files.len(), 1);
-        assert_eq!(body.subdirectories.len(), 1);
-        assert_eq!(body.subdirectories[0].files.len(), 1);
-        assert_eq!(body.subdirectories[0].files[0], "sub1.fmemo");
+        let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        let files = body["files"].as_array().unwrap();
+        let directories = body["directories"].as_array().unwrap();
+        
+        assert_eq!(files.len(), 1);
+        assert_eq!(directories.len(), 1);
+        assert_eq!(directories[0].as_str().unwrap(), "subdir");
     }
 
     #[tokio::test] 
@@ -758,5 +871,177 @@ fn test() {}
         let parsed: serde_json::Value = serde_json::from_str(msg1).unwrap();
         assert_eq!(parsed["type"], "file_updated");
         assert_eq!(parsed["memos"][0]["title"], "Updated Content");
+    }
+
+    #[tokio::test]
+    async fn test_static_routes_creation() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Create mock dist directory structure
+        let dist_dir = temp_dir.path().join("dist");
+        fs::create_dir(&dist_dir).unwrap();
+        fs::create_dir(&dist_dir.join("assets")).unwrap();
+        fs::write(&dist_dir.join("index.html"), "<!DOCTYPE html><html><head></head><body></body></html>").unwrap();
+        fs::write(&dist_dir.join("favicon.ico"), "fake favicon").unwrap();
+        fs::write(&dist_dir.join("vite.svg"), "<svg></svg>").unwrap();
+        fs::write(&dist_dir.join("assets").join("main.js"), "console.log('test');").unwrap();
+        
+        let static_routes = create_static_routes(dist_dir.clone());
+        
+        // Test serving index.html for SPA routes
+        let response = warp::test::request()
+            .method("GET")
+            .path("/")
+            .reply(&static_routes)
+            .await;
+        
+        assert_eq!(response.status(), 200);
+        assert!(response.body().starts_with(b"<!DOCTYPE html"));
+        
+        // Test serving favicon
+        let response = warp::test::request()
+            .method("GET")
+            .path("/favicon.ico")
+            .reply(&static_routes)
+            .await;
+        
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.body(), &b"fake favicon"[..]);
+        
+        // Test serving assets
+        let response = warp::test::request()
+            .method("GET")
+            .path("/assets/main.js")
+            .reply(&static_routes)
+            .await;
+        
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.body(), &b"console.log('test');"[..]);
+    }
+
+    #[tokio::test]
+    async fn test_api_only_routes() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_fmemo_file(temp_dir.path(), "test", "# Test Content\nSome content");
+        
+        let clients: WebSocketClients = Arc::new(Mutex::new(Vec::new()));
+        let api_routes = create_api_only_routes(temp_dir.path().to_path_buf(), clients);
+        
+        // Test API endpoint works
+        let response = warp::test::request()
+            .method("GET")
+            .path("/api/root")
+            .reply(&api_routes)
+            .await;
+        
+        assert_eq!(response.status(), 200);
+        
+        let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        let files = body["files"].as_array().unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].as_str().unwrap(), "test.fmemo");
+    }
+
+    #[tokio::test]
+    async fn test_full_routes_combination() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_fmemo_file(temp_dir.path(), "test", "# Test Content\nSome content");
+        
+        // Create mock dist directory
+        let dist_dir = temp_dir.path().join("dist");
+        fs::create_dir(&dist_dir).unwrap();
+        fs::write(&dist_dir.join("index.html"), "<!DOCTYPE html><html><head></head><body></body></html>").unwrap();
+        
+        let clients: WebSocketClients = Arc::new(Mutex::new(Vec::new()));
+        let full_routes = create_full_routes(
+            temp_dir.path().to_path_buf(),
+            dist_dir.clone(),
+            clients
+        );
+        
+        // Test API endpoint works
+        let response = warp::test::request()
+            .method("GET")
+            .path("/api/root")
+            .reply(&full_routes)
+            .await;
+        
+        assert_eq!(response.status(), 200);
+        
+        // Test static file serving works
+        let response = warp::test::request()
+            .method("GET")
+            .path("/")
+            .reply(&full_routes)
+            .await;
+        
+        assert_eq!(response.status(), 200);
+        assert!(response.body().starts_with(b"<!DOCTYPE html"));
+        
+        // Test SPA fallback for unknown routes
+        let response = warp::test::request()
+            .method("GET")
+            .path("/some/spa/route")
+            .reply(&full_routes)
+            .await;
+        
+        assert_eq!(response.status(), 200);
+        assert!(response.body().starts_with(b"<!DOCTYPE html"));
+    }
+
+    #[tokio::test]
+    async fn test_cors_headers() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_fmemo_file(temp_dir.path(), "test", "# Test Content");
+        
+        let api_routes = create_api_routes(temp_dir.path().to_path_buf());
+        
+        let response = warp::test::request()
+            .method("GET")
+            .path("/api/root")
+            .header("Origin", "http://localhost:3000")
+            .reply(&api_routes)
+            .await;
+        
+        assert_eq!(response.status(), 200);
+        
+        // Check CORS headers are present
+        let headers = response.headers();
+        assert!(headers.contains_key("access-control-allow-origin"));
+    }
+
+    #[tokio::test]
+    async fn test_api_file_endpoint_frontend_compatible() {
+        let temp_dir = TempDir::new().unwrap();
+        let content = r#"
+# Test Function
+<desc>A test function</desc>
+
+This is content.
+
+```rust
+fn test() {}
+```
+"#;
+        create_test_fmemo_file(temp_dir.path(), "test", content);
+
+        let api = create_api_routes(temp_dir.path().to_path_buf());
+
+        let response = warp::test::request()
+            .method("GET")
+            .path("/api/file/test.fmemo")
+            .reply(&api)
+            .await;
+
+        assert_eq!(response.status(), 200);
+        
+        let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert_eq!(body["path"].as_str().unwrap(), "test.fmemo");
+        assert!(body["content"].as_str().is_some());
+        assert!(body["memos"].as_array().is_some());
+        
+        let memos = body["memos"].as_array().unwrap();
+        assert_eq!(memos.len(), 1);
+        assert_eq!(memos[0]["title"].as_str().unwrap(), "Test Function");
     }
 }

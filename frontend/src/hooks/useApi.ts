@@ -1,86 +1,95 @@
-import { useState, useEffect, useCallback } from 'react';
-import { apiClient, DirectoryTree, FileContent, WebSocketMessage } from '../api/client';
+import { useState, useCallback } from 'react';
+import { apiClient } from '../api/client';
+import { useMemoCache } from './useMemoCache';
+import type { FunctionMemo, DirectoryStructure } from '../types';
 
-export function useDirectoryTree() {
-  const [tree, setTree] = useState<DirectoryTree | null>(null);
+export const useApi = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { getCachedMemos, setCachedMemos, invalidateCache } = useMemoCache();
 
-  const fetchTree = useCallback(async () => {
+  const fetchDirectoryTree = useCallback(async (path: string = ''): Promise<DirectoryStructure | null> => {
     setLoading(true);
     setError(null);
+    
     try {
-      const result = await apiClient.getDirectoryTree();
-      setTree(result);
+      const response = await apiClient.getDirectoryTree(path);
+      
+      if (response.error) {
+        setError(response.error);
+        return null;
+      }
+      
+      return apiClient.convertToDirectoryStructure(response.data, path || '/Users/kai/refactor-fmemo');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch directory tree');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errorMessage);
+      return null;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchTree();
-  }, [fetchTree]);
+  const fetchFileContent = useCallback(async (filePath: string, forceRefresh: boolean = false): Promise<FunctionMemo[] | null> => {
+    console.log(`[useApi] fetchFileContent called with: ${filePath}, forceRefresh: ${forceRefresh}`);
+    
+    // Check cache first unless force refresh is requested
+    if (!forceRefresh) {
+      const cachedMemos = getCachedMemos(filePath);
+      if (cachedMemos) {
+        console.log(`[useApi] Using cached memos for ${filePath}:`, cachedMemos.length, 'items');
+        return cachedMemos;
+      }
+    }
 
-  return { tree, loading, error, refetch: fetchTree };
-}
-
-export function useFileContent(filename?: string) {
-  const [content, setContent] = useState<FileContent | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchContent = useCallback(async (file: string) => {
     setLoading(true);
     setError(null);
+    console.log(`[useApi] Making API call for: ${filePath}`);
+    
     try {
-      const result = await apiClient.getFileContent(file);
-      setContent(result);
+      const response = await apiClient.getFileContent(filePath);
+      console.log(`[useApi] API response:`, response);
+      
+      if (response.error) {
+        console.error(`[useApi] API returned error:`, response.error);
+        setError(response.error);
+        return null;
+      }
+      
+      const memos = response.data.memos;
+      console.log(`[useApi] Extracted memos:`, memos);
+      
+      // Cache the result
+      setCachedMemos(filePath, memos);
+      console.log(`[useApi] Cached ${memos.length} memos for ${filePath}`);
+      
+      return memos;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch file content');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error(`[useApi] Error fetching file content:`, err);
+      setError(errorMessage);
+      return null;
     } finally {
       setLoading(false);
     }
+  }, [getCachedMemos, setCachedMemos]);
+
+  const clearError = useCallback(() => {
+    setError(null);
   }, []);
 
-  useEffect(() => {
-    if (filename) {
-      fetchContent(filename);
-    }
-  }, [filename, fetchContent]);
+  const refreshFileContent = useCallback((filePath: string) => {
+    invalidateCache(filePath);
+    return fetchFileContent(filePath, true);
+  }, [fetchFileContent, invalidateCache]);
 
-  return { content, loading, error, fetchContent };
-}
-
-export function useWebSocket() {
-  const [connected, setConnected] = useState(false);
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
-
-  useEffect(() => {
-    const handleMessage = (message: WebSocketMessage) => {
-      setLastMessage(message);
-    };
-
-    apiClient.connectWebSocket(handleMessage);
-
-    const checkConnection = setInterval(() => {
-      setConnected(apiClient.isWebSocketConnected());
-    }, 1000);
-
-    return () => {
-      clearInterval(checkConnection);
-      apiClient.disconnectWebSocket();
-    };
-  }, []);
-
-  const addListener = useCallback((listener: (message: WebSocketMessage) => void) => {
-    apiClient.addWebSocketListener(listener);
-  }, []);
-
-  const removeListener = useCallback((listener: (message: WebSocketMessage) => void) => {
-    apiClient.removeWebSocketListener(listener);
-  }, []);
-
-  return { connected, lastMessage, addListener, removeListener };
-}
+  return {
+    loading,
+    error,
+    fetchDirectoryTree,
+    fetchFileContent,
+    refreshFileContent,
+    clearError,
+    invalidateCache
+  };
+};
