@@ -1,4 +1,19 @@
-#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+/// Response for GET /api/root - directory tree starting from root
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct DirectoryTree {
+    pub path: String,
+    pub files: Vec<String>,           // .fmemo file names
+    pub subdirectories: Vec<DirectoryTree>,
+}
+
+/// Response for GET /api/files/{filepath} - file content
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct FileContent {
+    pub memos: Vec<Memo>,
+    pub last_modified: Option<u64>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Memo {
     level: Level,
     title: String,
@@ -18,7 +33,7 @@ pub struct MemoBuilder {
     children: Vec<Memo>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Level(u8);
 
 impl Level {
@@ -58,7 +73,7 @@ impl MemoBuilder {
         self.content = Some(content);
         self
     }
-    
+
     pub fn append_content(mut self, additional_content: &str) -> Self {
         let current = self.content.unwrap_or_default();
         self.content = Some(current + additional_content);
@@ -82,7 +97,7 @@ impl MemoBuilder {
             children: self.children,
         }
     }
-    
+
     pub fn level(&self) -> &Level {
         &self.level
     }
@@ -92,29 +107,29 @@ impl Memo {
     pub fn level(&self) -> &Level {
         &self.level
     }
-    
+
     pub fn title(&self) -> &String {
         &self.title
     }
-    
+
     pub fn content(&self) -> &Option<String> {
         &self.content
     }
-    
+
     pub fn description(&self) -> &Option<String> {
         &self.description
     }
-    
+
     pub fn code_blocks(&self) -> &Vec<CodeBlock> {
         &self.code_blocks
     }
-    
+
     pub fn children(&self) -> &Vec<Memo> {
         &self.children
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct CodeBlock {
     pub language: String,
     pub code: String,
