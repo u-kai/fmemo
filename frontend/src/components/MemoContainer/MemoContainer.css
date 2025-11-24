@@ -1,0 +1,173 @@
+.memo-container {
+  display: inline-block;
+  width: max-content;
+  border: 3px solid #333;
+  margin: 15px;
+  background-color: white;
+  position: relative;
+  border-radius: 8px;
+  min-height: 80px;
+  min-width: 260px;
+  overflow: visible;
+}
+
+.memo-header {
+  padding: 15px 20px 10px 20px;
+  border-bottom: 1px solid #eee;
+  background-color: #fafafa;
+  border-radius: 5px 5px 0 0;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.memo-header:hover {
+  background-color: #f0f0f0 !important;
+}
+
+.memo-title-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expand-icon {
+  font-size: 0.8em;
+  color: #666;
+  transition: transform 0.3s;
+  user-select: none;
+}
+
+.expand-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.memo-title {
+  font-weight: bold;
+  margin: 0;
+}
+
+.memo-content {
+  padding: 15px 20px;
+  line-height: 1.6;
+}
+
+.memo-content p {
+  margin: 0.5em 0;
+}
+
+.memo-content ul {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.memo-content ul ul {
+  margin: 0.2em 0;
+  padding-left: 1.2em;
+}
+
+.memo-content li {
+  margin: 0.2em 0;
+}
+
+.memo-body {
+  padding: 0px 20px 20px 20px;
+}
+
+.children-container {
+  margin: 20px 15px 15px 15px;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, width 0.3s ease-out, margin 0.3s ease-out;
+}
+
+.children-container.collapsed {
+  max-height: 0;
+  width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.children-container.expanded {
+  max-height: 10000px;
+  width: max-content;
+  margin: 20px 15px 15px 15px;
+}
+
+.no-children .expand-icon {
+  visibility: hidden;
+}
+
+/* Level-specific styling */
+.level-1 {
+  border-color: #e74c3c;
+  border-width: 4px;
+  font-size: 1.1em;
+}
+.level-1 .memo-title { font-size: 1.4em; }
+
+.level-2 {
+  border-color: #3498db;
+  border-width: 3px;
+  font-size: 1.05em;
+}
+.level-2 .memo-title { font-size: 1.2em; }
+
+.level-3 {
+  border-color: #2ecc71;
+  border-width: 3px;
+}
+.level-3 .memo-title { font-size: 1.1em; }
+
+.level-4 {
+  border-color: #f39c12;
+  border-width: 2px;
+  font-size: 0.95em;
+}
+.level-4 .memo-title { font-size: 1.05em; }
+
+.level-5 {
+  border-color: #9b59b6;
+  border-width: 2px;
+  font-size: 0.9em;
+}
+.level-5 .memo-title { font-size: 1.0em; }
+
+.level-6, .level-7, .level-8 {
+  border-color: #95a5a6;
+  border-width: 1px;
+  font-size: 0.85em;
+}
+
+/* Horizontal layout styles */
+.siblings-container {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 25px;
+  align-items: flex-start;
+  min-width: max-content;
+}
+
+.horizontal-layout .memo-container {
+  display: inline-flex;
+  flex-direction: column;
+  width: max-content;
+  min-width: 280px;
+}
+
+.horizontal-layout .children-container.expanded {
+  margin: 25px 20px 20px 20px;
+  width: max-content;
+}
+
+.horizontal-layout .children-container.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.horizontal-layout .siblings-container > .memo-container {
+  margin: 15px 0;
+  min-width: 260px;
+}
