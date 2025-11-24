@@ -1,4 +1,4 @@
-use crate::schema::{Level, Memo, MemoBuilder, CodeBlock};
+use crate::schema::{Level, Memo, MemoBuilder};
 
 pub fn parse_memo(content: &str) -> Vec<Memo> {
     let flat_memos = parse_flat(content);

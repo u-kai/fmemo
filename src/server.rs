@@ -1,8 +1,24 @@
 use crate::parser::parse_memo;
 use crate::schema::{DirectoryTree, FileContent};
+use futures_util::{SinkExt, StreamExt};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::channel;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use tokio::sync::mpsc::UnboundedSender;
 use warp::Filter;
+
+/// WebSocket client manager
+pub type WebSocketClients = Arc<Mutex<Vec<UnboundedSender<warp::ws::Message>>>>;
+
+/// File change notification data
+#[derive(Debug, Clone)]
+pub struct FileChangeNotification {
+    pub file_path: PathBuf,
+    pub memos: Vec<crate::schema::Memo>,
+}
 
 /// Scan directory for .fmemo files and build directory tree
 pub fn scan_directory<P: AsRef<Path>>(root_path: P) -> std::io::Result<DirectoryTree> {
@@ -140,6 +156,160 @@ pub fn create_api_routes(
     };
 
     root_route.or(files_route)
+}
+
+/// Create WebSocket route for real-time updates
+pub fn create_websocket_route(
+    clients: WebSocketClients,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path("ws")
+        .and(warp::ws())
+        .map(move |ws: warp::ws::Ws| {
+            let clients = Arc::clone(&clients);
+            ws.on_upgrade(move |websocket| async move {
+                handle_websocket_connection(websocket, clients).await;
+            })
+        })
+}
+
+/// Handle individual WebSocket connection
+async fn handle_websocket_connection(
+    websocket: warp::ws::WebSocket,
+    clients: WebSocketClients,
+) {
+    let (mut ws_tx, mut ws_rx) = websocket.split();
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    clients.lock().unwrap().push(tx);
+
+    let send_task = tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            if ws_tx.send(msg).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let recv_task = tokio::spawn(async move {
+        while let Some(result) = ws_rx.next().await {
+            if result.is_err() {
+                break;
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = send_task => {},
+        _ = recv_task => {},
+    }
+}
+
+/// Broadcast message to all WebSocket clients
+pub fn broadcast_to_clients(clients: &WebSocketClients, message: serde_json::Value) {
+    let clients_lock = clients.lock().unwrap();
+    let message_text = message.to_string();
+    
+    clients_lock.iter().for_each(|client| {
+        let _ = client.send(warp::ws::Message::text(message_text.clone()));
+    });
+}
+
+/// Start file watcher for a specific file
+pub fn start_file_watcher<P: AsRef<Path>>(
+    file_path: P,
+    clients: WebSocketClients,
+) -> std::io::Result<()> {
+    let file_path = file_path.as_ref().to_path_buf();
+    let (tx, rx) = channel();
+    let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    
+    watcher.watch(&file_path, RecursiveMode::NonRecursive)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    // Spawn background thread to handle file changes
+    thread::spawn(move || {
+        // Keep watcher alive
+        let _watcher = watcher;
+        
+        loop {
+            match rx.recv() {
+                Ok(Ok(_event)) => {
+                    if let Ok(content) = fs::read_to_string(&file_path) {
+                        let memos = parse_memo(&content);
+                        
+                        let update_msg = serde_json::json!({
+                            "type": "file_updated",
+                            "file_path": file_path.to_string_lossy(),
+                            "memos": memos
+                        });
+                        
+                        broadcast_to_clients(&clients, update_msg);
+                    }
+                }
+                Ok(Err(e)) => {
+                    eprintln!("File watch event error: {:?}", e);
+                }
+                Err(e) => {
+                    eprintln!("File watch channel error: {:?}", e);
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+/// Start directory watcher for .fmemo files
+pub fn start_directory_watcher<P: AsRef<Path>>(
+    root_path: P,
+    clients: WebSocketClients,
+) -> std::io::Result<()> {
+    let root_path = root_path.as_ref().to_path_buf();
+    let (tx, rx) = channel();
+    let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    
+    watcher.watch(&root_path, RecursiveMode::Recursive)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    thread::spawn(move || {
+        let _watcher = watcher;
+        
+        loop {
+            match rx.recv() {
+                Ok(Ok(event)) => {
+                    // Check if any changed file is a .fmemo file
+                    for path in &event.paths {
+                        if path.extension().and_then(|s| s.to_str()) == Some("fmemo") {
+                            match scan_directory(&root_path) {
+                                Ok(tree) => {
+                                    let update_msg = serde_json::json!({
+                                        "type": "directory_updated",
+                                        "tree": tree
+                                    });
+                                    
+                                    broadcast_to_clients(&clients, update_msg);
+                                    break; // Only send one update per event
+                                }
+                                Err(e) => eprintln!("Directory scan error: {:?}", e),
+                            }
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    eprintln!("Directory watch event error: {:?}", e);
+                }
+                Err(e) => {
+                    eprintln!("Directory watch channel error: {:?}", e);
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -456,5 +626,137 @@ fn test() {}
             .await;
 
         assert_eq!(response.status(), 404);  // Not Found
+    }
+
+    #[tokio::test]
+    async fn test_file_change_websocket_integration() {
+        use std::time::Duration;
+        use tokio::time::timeout;
+        
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_fmemo_file(temp_dir.path(), "test", "# Original Title\nOriginal content");
+        
+        // Create mock WebSocket client
+        let (client_tx, mut client_rx) = tokio::sync::mpsc::unbounded_channel();
+        let clients: WebSocketClients = Arc::new(Mutex::new(vec![client_tx]));
+        
+        // Start file watcher
+        start_file_watcher(&file_path, clients.clone()).unwrap();
+        
+        // Give the watcher a moment to start
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        
+        // Modify the file
+        fs::write(&file_path, "# Updated Title\n<desc>New description</desc>\nUpdated content\n\n```rust\nfn test() {}\n```").unwrap();
+        
+        // Wait for notification with timeout
+        let result = timeout(Duration::from_secs(2), client_rx.recv()).await;
+        
+        assert!(result.is_ok(), "Should receive WebSocket message within timeout");
+        
+        let message = result.unwrap().unwrap();
+        let text = message.to_str().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+        
+        // Verify message structure
+        assert_eq!(parsed["type"], "file_updated");
+        assert!(parsed["file_path"].as_str().unwrap().ends_with("test.fmemo"));
+        
+        // Verify memo content
+        let memos = &parsed["memos"];
+        assert_eq!(memos.as_array().unwrap().len(), 1);
+        
+        let memo = &memos[0];
+        assert_eq!(memo["title"], "Updated Title");
+        assert_eq!(memo["description"], "New description");
+        assert_eq!(memo["code_blocks"].as_array().unwrap().len(), 1);
+        assert_eq!(memo["code_blocks"][0]["language"], "rust");
+    }
+
+    #[tokio::test]
+    async fn test_directory_change_websocket_integration() {
+        use std::time::Duration;
+        use tokio::time::timeout;
+        
+        let temp_dir = TempDir::new().unwrap();
+        create_test_fmemo_file(temp_dir.path(), "existing", "# Existing File");
+        
+        // Create mock WebSocket client
+        let (client_tx, mut client_rx) = tokio::sync::mpsc::unbounded_channel();
+        let clients: WebSocketClients = Arc::new(Mutex::new(vec![client_tx]));
+        
+        // Start directory watcher
+        start_directory_watcher(temp_dir.path(), clients.clone()).unwrap();
+        
+        // Give the watcher a moment to start
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        
+        // Create a new .fmemo file
+        create_test_fmemo_file(temp_dir.path(), "new_file", "# New File\nThis is new content");
+        
+        // Wait for notification with timeout
+        let result = timeout(Duration::from_secs(2), client_rx.recv()).await;
+        
+        assert!(result.is_ok(), "Should receive WebSocket message within timeout");
+        
+        let message = result.unwrap().unwrap();
+        let text = message.to_str().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+        
+        // Verify message structure
+        assert_eq!(parsed["type"], "directory_updated");
+        
+        // Verify directory tree content
+        let tree = &parsed["tree"];
+        assert_eq!(tree["files"].as_array().unwrap().len(), 2);
+        
+        let files = tree["files"].as_array().unwrap();
+        let file_names: Vec<&str> = files.iter()
+            .map(|f| f.as_str().unwrap())
+            .collect();
+        
+        assert!(file_names.contains(&"existing.fmemo"));
+        assert!(file_names.contains(&"new_file.fmemo"));
+    }
+
+    #[tokio::test]
+    async fn test_multiple_clients_receive_updates() {
+        use std::time::Duration;
+        use tokio::time::timeout;
+        
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_fmemo_file(temp_dir.path(), "test", "# Test");
+        
+        // Create multiple mock WebSocket clients
+        let (client1_tx, mut client1_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (client2_tx, mut client2_rx) = tokio::sync::mpsc::unbounded_channel();
+        let clients: WebSocketClients = Arc::new(Mutex::new(vec![client1_tx, client2_tx]));
+        
+        // Start file watcher
+        start_file_watcher(&file_path, clients.clone()).unwrap();
+        
+        // Give the watcher a moment to start
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        
+        // Modify the file
+        fs::write(&file_path, "# Updated Content").unwrap();
+        
+        // Both clients should receive the message
+        let result1 = timeout(Duration::from_secs(2), client1_rx.recv()).await;
+        let result2 = timeout(Duration::from_secs(2), client2_rx.recv()).await;
+        
+        assert!(result1.is_ok(), "Client 1 should receive message");
+        assert!(result2.is_ok(), "Client 2 should receive message");
+        
+        // Both should have the same content
+        let message1 = result1.unwrap().unwrap();
+        let message2 = result2.unwrap().unwrap();
+        let msg1 = message1.to_str().unwrap();
+        let msg2 = message2.to_str().unwrap();
+        assert_eq!(msg1, msg2);
+        
+        let parsed: serde_json::Value = serde_json::from_str(msg1).unwrap();
+        assert_eq!(parsed["type"], "file_updated");
+        assert_eq!(parsed["memos"][0]["title"], "Updated Content");
     }
 }
