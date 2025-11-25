@@ -1,6 +1,7 @@
 .memo-container {
   display: inline-block;
-  width: max-content;
+  width: auto;
+  max-width: 520px;
   border: 3px solid #333;
   margin: 15px 15px 15px 0;
   background-color: white;
@@ -9,8 +10,16 @@
   min-height: 80px;
   min-width: 260px;
   overflow: visible;
+  /* Prevent children from bleeding outside container bounds */
   /* Ensure flex parents top-align this item consistently */
   align-self: flex-start;
+  /* Force downward-only expansion */
+}
+
+/* Allow card to grow horizontally only when opened */
+.memo-container.expanded {
+  width: max-content;
+  max-width: none;
 }
 
 .memo-header {
@@ -83,16 +92,18 @@
 }
 
 .children-container {
-  /* Keep a constant gap below the header so the top never shifts */
+  /* Gap under header; top of container stays fixed */
   margin: 20px 15px 15px 15px;
   overflow: hidden;
   transition: max-height 0.3s ease-out;
-  transform-origin: top;
+  transform-origin: top center;
 }
 
 .children-container.collapsed {
   max-height: 0;
-  /* Width collapsing is handled specifically for horizontal layout below */
+  width: 0 !important;
+  min-width: 0 !important;
+  /* Keep top margin so expansion grows downward from the header */
 }
 
 .children-container.expanded {
@@ -152,13 +163,26 @@
   gap: 25px;
   align-items: flex-start;
   min-width: max-content;
+  /* Ensure children align at the top and don't shift when siblings expand */
+  position: relative;
+}
+
+/* Force all sibling containers to have same top alignment */
+.siblings-container > .memo-container {
+  align-self: flex-start;
 }
 
 .horizontal-layout .memo-container {
   display: inline-flex;
   flex-direction: column;
-  width: max-content;
+  width: auto;
+  max-width: 520px;
   min-width: 280px;
+}
+
+.horizontal-layout .memo-container.expanded {
+  width: max-content;
+  max-width: none;
 }
 
 .horizontal-layout .children-container.expanded {

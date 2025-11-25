@@ -63,7 +63,7 @@ export const MemoContainer: React.FC<MemoContainerProps> = ({
 
     return (
       <div className={`children-container ${isExpanded ? 'expanded' : 'collapsed'}`}>
-        {memo.children && memo.children.length > 1 && isHorizontal ? (
+        {isHorizontal && memo.children && memo.children.length > 0 ? (
           <div className="siblings-container">
             {memo.children.map((child, index) => (
               <MemoContainer key={index} memo={child} isHorizontal={isHorizontal} />
@@ -78,8 +78,10 @@ export const MemoContainer: React.FC<MemoContainerProps> = ({
     );
   };
 
+  const containerClass = `memo-container ${levelClass}${noChildrenClass} ${isExpanded ? 'expanded' : 'collapsed'}`;
+
   return (
-    <div className={`memo-container ${levelClass}${noChildrenClass}`}>
+    <div className={containerClass}>
       <div className="memo-header" onClick={handleToggle}>
         <div className="memo-title-container">
           <span className={`expand-icon ${isExpanded ? 'expanded' : ''}`}>▶</span>
