@@ -42,6 +42,23 @@ export const FlowView: React.FC<FlowViewProps> = ({
     scheduleCompute(el);
   }, [memos]);
 
+  // Ensure connectors are computed when component mounts/remounts
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    
+    // Reset state on mount to ensure clean start
+    setConnectors([]);
+    setSvgSize({ width: 0, height: 0 });
+    
+    // Add extra delay for remount scenarios (Flow->Memo->Flow)
+    setTimeout(() => {
+      if (el.isConnected) {
+        scheduleCompute(el);
+      }
+    }, 50);
+  }, []);
+
   // Recompute on resize
   useEffect(() => {
     const handleResize = () => {

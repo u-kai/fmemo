@@ -352,6 +352,7 @@ export const App: React.FC = () => {
               memos={memos}
               className="view-mode active"
               onNodeClick={handleFlowNodeClick}
+              key={`flow-${viewMode.mode}-${memos.length}`}
             />
           )}
         </div>
