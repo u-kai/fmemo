@@ -190,7 +190,6 @@ type Connector = { type: 'vertical' | 'horizontal'; x1: number; y1: number; x2: 
 
 function computeConnectors(container: HTMLElement): Connector[] {
   const connectors: Connector[] = [];
-  const containerRect = container.getBoundingClientRect();
 
   // Parent-child vertical connectors
   container.querySelectorAll(".flow-tree-node").forEach((treeNode) => {
@@ -204,11 +203,15 @@ function computeConnectors(container: HTMLElement): Connector[] {
     if (childNodes.length === 0) return;
 
     childNodes.forEach((childNode, index) => {
-      const parentRect = parentNode.getBoundingClientRect();
-      const childRect = childNode.getBoundingClientRect();
-      const x = parentRect.left + parentRect.width / 2 - containerRect.left;
-      const y1 = parentRect.bottom - containerRect.top;
-      const y2 = childRect.top - containerRect.top;
+      // Use offset positions relative to the flow container instead of getBoundingClientRect
+      const parentOffsetLeft = getElementOffsetLeft(parentNode, container);
+      const parentOffsetTop = getElementOffsetTop(parentNode, container);
+      const childOffsetLeft = getElementOffsetLeft(childNode, container);
+      const childOffsetTop = getElementOffsetTop(childNode, container);
+      
+      const x = parentOffsetLeft + parentNode.offsetWidth / 2;
+      const y1 = parentOffsetTop + parentNode.offsetHeight;
+      const y2 = childOffsetTop;
       connectors.push({ type: 'vertical', x1: x, y1, x2: x, y2, arrow: index === 0 ? 'dark' : undefined });
     });
   });
@@ -227,16 +230,43 @@ function computeConnectors(container: HTMLElement): Connector[] {
     if (hasLevel1) return;
 
     for (let i = 0; i < siblingNodes.length - 1; i++) {
-      const leftRect = siblingNodes[i].getBoundingClientRect();
-      const rightRect = siblingNodes[i + 1].getBoundingClientRect();
-      const startX = leftRect.right - containerRect.left;
-      const endX = rightRect.left - containerRect.left;
-      const y = leftRect.top + leftRect.height / 2 - containerRect.top;
+      const leftNode = siblingNodes[i];
+      const rightNode = siblingNodes[i + 1];
+      
+      const leftOffsetLeft = getElementOffsetLeft(leftNode, container);
+      const leftOffsetTop = getElementOffsetTop(leftNode, container);
+      const rightOffsetLeft = getElementOffsetLeft(rightNode, container);
+      const rightOffsetTop = getElementOffsetTop(rightNode, container);
+      
+      const startX = leftOffsetLeft + leftNode.offsetWidth;
+      const endX = rightOffsetLeft;
+      const y = leftOffsetTop + leftNode.offsetHeight / 2;
       connectors.push({ type: 'horizontal', x1: startX, y1: y, x2: endX, y2: y, arrow: 'light' });
     }
   });
 
   return connectors;
+}
+
+// Helper functions to get element offset relative to a container
+function getElementOffsetLeft(element: HTMLElement, container: HTMLElement): number {
+  let offsetLeft = 0;
+  let current = element;
+  while (current && current !== container) {
+    offsetLeft += current.offsetLeft;
+    current = current.offsetParent as HTMLElement;
+  }
+  return offsetLeft;
+}
+
+function getElementOffsetTop(element: HTMLElement, container: HTMLElement): number {
+  let offsetTop = 0;
+  let current = element;
+  while (current && current !== container) {
+    offsetTop += current.offsetTop;
+    current = current.offsetParent as HTMLElement;
+  }
+  return offsetTop;
 }
 
 // Switched to SVG overlay; DOM-based line drawing removed.

@@ -9,6 +9,8 @@
   min-height: 80px;
   min-width: 260px;
   overflow: visible;
+  /* Ensure flex parents top-align this item consistently */
+  align-self: flex-start;
 }
 
 .memo-header {
@@ -81,23 +83,21 @@
 }
 
 .children-container {
+  /* Keep a constant gap below the header so the top never shifts */
   margin: 20px 15px 15px 15px;
   overflow: hidden;
-  transition: max-height 0.3s ease-out, width 0.3s ease-out, margin 0.3s ease-out;
+  transition: max-height 0.3s ease-out;
+  transform-origin: top;
 }
 
 .children-container.collapsed {
   max-height: 0;
-  width: 0 !important;
-  min-width: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
+  /* Width collapsing is handled specifically for horizontal layout below */
 }
 
 .children-container.expanded {
   max-height: 10000px;
   width: max-content;
-  margin: 20px 15px 15px 15px;
 }
 
 .no-children .expand-icon {
@@ -162,15 +162,14 @@
 }
 
 .horizontal-layout .children-container.expanded {
-  margin: 25px 20px 20px 20px;
+  margin: 20px 20px 20px 20px;
   width: max-content;
 }
 
 .horizontal-layout .children-container.collapsed {
   width: 0 !important;
   min-width: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
+  /* Keep the top margin so expansion grows downward from the header */
 }
 
 .horizontal-layout .siblings-container > .memo-container {
