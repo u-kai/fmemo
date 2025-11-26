@@ -1,17 +1,12 @@
-   Compiling fmemo v0.1.0 (/Users/kai/fmemo)
-warning: field `language` is never read
-  --> src/main.rs:20:5
-   |
-19 | struct CodeBlock {
-   |        --------- field in this struct
-20 |     language: String,
-   |     ^^^^^^^^
-   |
-   = note: `CodeBlock` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
-   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
-
-warning: `fmemo` (bin "fmemo") generated 1 warning
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.67s
-     Running `target/debug/fmemo`
+Serving embedded frontend (single binary mode)...
+Root directory: .
 Server running on http://localhost:3030
-Create an 'input.md' file to see the live preview
+Frontend available at: http://localhost:3030/
+API endpoints:
+  GET /api/root - Get directory tree
+  GET /api/files/{filename} - Get file content
+  WebSocket /ws - Real-time updates
+
+thread 'main' (124531955) panicked at /Users/kai/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/warp-0.3.7/src/server.rs:217:27:
+error binding to 127.0.0.1:3030: error creating server listener: Operation not permitted (os error 1)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

@@ -28,7 +28,7 @@ export const ZoomControls: React.FC<ZoomControlsProps> = ({
 }) => {
   return (
     <div id="zoom-controls" className={collapsed ? 'collapsed' : ''}>
-      <Button variant="zoom" onClick={onToggleCollapsed}>
+      <Button variant="zoom" onClick={onToggleCollapsed ?? (() => {})}>
         {collapsed ? '▲' : '▼'}
       </Button>
       {!collapsed && (

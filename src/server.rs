@@ -268,6 +268,75 @@ pub fn create_api_only_routes(
     api_routes.or(ws_route)
 }
 
+// Embedded static file serving (feature-gated)
+#[cfg(feature = "embed_frontend")]
+mod embedded {
+    use super::*;
+    use mime_guess::from_path;
+    use rust_embed::RustEmbed;
+
+    #[derive(RustEmbed)]
+    #[folder = "frontend/dist/"]
+    struct Assets;
+
+    fn respond(path: &str) -> Option<warp::reply::Response> {
+        let asset = Assets::get(path)?;
+        let body = warp::hyper::Body::from(asset.data.into_owned());
+        let mime = from_path(path).first_or_octet_stream();
+        let mut resp = warp::http::Response::new(body);
+        resp.headers_mut().insert(
+            warp::http::header::CONTENT_TYPE,
+            warp::http::HeaderValue::from_str(mime.as_ref()).unwrap_or(warp::http::HeaderValue::from_static("application/octet-stream")),
+        );
+        Some(resp)
+    }
+
+    pub fn create_embedded_static_routes(
+    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+        // /assets/*
+        let assets = warp::path("assets")
+            .and(warp::path::tail())
+            .and(warp::get())
+            .map(|tail: warp::path::Tail| {
+                let path = format!("assets/{}", tail.as_str());
+                respond(&path).unwrap_or_else(|| warp::reply::Response::new(warp::hyper::Body::empty()))
+            });
+
+        // Root-level files like index.html, favicon.ico, vite.svg
+        let root_files = warp::get().and(warp::path::param::<String>()).and_then(|name: String| async move {
+            let known = ["index.html", "favicon.ico", "vite.svg"]; // fast path
+            if known.contains(&name.as_str()) {
+                if let Some(resp) = respond(&name) { return Ok(resp); }
+            }
+            Err(warp::reject::not_found())
+        });
+
+        // SPA fallback: serve index.html for all non-API, non-WS GET routes
+        let spa = warp::get()
+            .and(warp::path::full())
+            .and_then(|_path: warp::path::FullPath| async move {
+                if let Some(resp) = respond("index.html") {
+                    Ok::<_, warp::reject::Rejection>(resp)
+                } else {
+                    Err(warp::reject::not_found())
+                }
+            });
+
+        assets.or(root_files).or(spa)
+    }
+}
+
+#[cfg(feature = "embed_frontend")]
+pub fn create_full_routes_embedded(
+    root_dir: PathBuf,
+    clients: WebSocketClients,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    let api_routes = create_api_routes(root_dir);
+    let ws_route = create_websocket_route(clients);
+    let static_routes = embedded::create_embedded_static_routes();
+    api_routes.or(ws_route).or(static_routes)
+}
+
 /// Create WebSocket route for real-time updates
 pub fn create_websocket_route(
     clients: WebSocketClients,

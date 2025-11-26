@@ -1,5 +1,5 @@
 import React from 'react';
-import type { FileItem, DirectoryStructure } from '../../types';
+import type { DirectoryStructure } from '../../types';
 import { FileTreeItem } from './FileTreeItem';
 import './FileExplorer.css';
 

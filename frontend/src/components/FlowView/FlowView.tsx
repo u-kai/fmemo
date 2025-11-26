@@ -7,15 +7,12 @@ interface FlowViewProps {
   memos: FunctionMemo[];
   onNodeClick?: (node: FlowNodeType) => void;
   className?: string;
-  // Current zoom level applied to container (1.0 means no scaling)
-  zoom?: number;
 }
 
 export const FlowView: React.FC<FlowViewProps> = ({
   memos,
   onNodeClick,
   className = "",
-  zoom = 1.0,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const flowNodes = convertMemosToFlowNodes(memos);

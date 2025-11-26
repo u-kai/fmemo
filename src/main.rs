@@ -115,6 +115,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         warp::serve(routes).run(([127, 0, 0, 1], port)).await;
     } else {
+        // If compiled with embedded frontend, serve it from the binary
+        #[cfg(feature = "embed_frontend")]
+        {
+            println!("Serving embedded frontend (single binary mode)...");
+            let routes = fmemo::server::create_full_routes_embedded(root_dir.clone(), clients.clone());
+            let routes = routes.with(warp::log("fmemo"));
+
+            println!("Root directory: {}", root_dir.display());
+            println!("Server running on http://localhost:{}", port);
+            println!("Frontend available at: http://localhost:{}/", port);
+            println!("API endpoints:");
+            println!("  GET /api/root - Get directory tree");
+            println!("  GET /api/files/{{filename}} - Get file content");
+            println!("  WebSocket /ws - Real-time updates");
+
+            warp::serve(routes).run(([127, 0, 0, 1], port)).await;
+            return Ok(());
+        }
+
         // Try to auto-detect frontend directory
         let auto_frontend = PathBuf::from("frontend/dist");
         if auto_frontend.exists() && auto_frontend.is_dir() {

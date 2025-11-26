@@ -64,3 +64,15 @@ fn helper_function() {
 |
 |
 |======================================
+
+## Makefile Usage (Single Binary)
+
+- Build frontend, embed into Rust binary, run and verify
+  - `make package` — build frontend (`frontend/dist`) and Rust release binary with `embed_frontend`
+  - `make run ROOT=. PORT=3030` — run the binary serving embedded SPA + API/WS
+  - `make verify ROOT=. PORT=3030` — start in background, check `/api/root` and `/` (index.html), then stop
+
+- Notes
+  - First time only: Node.js required to build frontend assets
+  - After packaging, runtime does not require Node; `./target/release/fmemo -r <root>` works standalone
+  - You can also pass `--frontend ./frontend/dist` to serve from disk without embedding
