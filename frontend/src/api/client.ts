@@ -6,8 +6,9 @@ export interface ApiResponse<T> {
 }
 
 export interface ApiDirectoryTree {
+  path: string;
   files: string[];
-  directories: string[];
+  subdirectories: ApiDirectoryTree[];
 }
 
 export interface ApiFileContent {
@@ -114,22 +115,26 @@ export class ApiClient {
     return memos.map(toMemo);
   }
 
-  // Convert API response to frontend types
+  // Convert API response to frontend types (recursively)
   convertToDirectoryStructure(
-    apiData: ApiDirectoryTree, 
-    currentPath: string = '/Users/kai/refactor-fmemo'
+    apiData: ApiDirectoryTree,
+    currentPath?: string
   ): DirectoryStructure {
+    // Use path from API data, or provided currentPath
+    const path = currentPath || apiData.path;
     // Remember last root/current path for relative file path computation
-    this.lastRootPath = currentPath;
+    this.lastRootPath = path;
     const items: FileItem[] = [];
 
-    // Add directories
-    apiData.directories.forEach(dir => {
+    // Add subdirectories (recursively)
+    apiData.subdirectories.forEach(subdir => {
+      const dirName = subdir.path.split('/').pop() || subdir.path;
+      const subdirStructure = this.convertToDirectoryStructure(subdir, subdir.path);
       items.push({
-        name: dir,
-        path: `${currentPath}/${dir}`,
+        name: dirName,
+        path: subdir.path,
         type: 'directory',
-        children: [] // Will be populated when expanded
+        children: subdirStructure.items
       });
     });
 
@@ -138,14 +143,14 @@ export class ApiClient {
       const extension = this.getFileExtension(file);
       items.push({
         name: file,
-        path: `${currentPath}/${file}`,
+        path: `${path}/${file}`,
         type: 'file',
         extension
       });
     });
 
     return {
-      path: currentPath,
+      path,
       items: items.sort((a, b) => {
         // Sort directories first, then files
         if (a.type !== b.type) {
@@ -164,23 +169,27 @@ export class ApiClient {
 
 // Mock API client for development
 export class MockApiClient extends ApiClient {
-  private mockData: Record<string, ApiDirectoryTree> = {
-    '': {
-      files: ['README.md', 'Cargo.toml', 'input.md', 'test_hierarchy.md'],
-      directories: ['src', 'frontend', 'target']
-    },
-    'src': {
-      files: ['main.rs', 'lib.rs', 'parser.rs', 'server.rs'],
-      directories: []
-    },
-    'frontend': {
-      files: ['package.json', 'vite.config.ts', 'tsconfig.json'],
-      directories: ['src', 'public']
-    },
-    'frontend/src': {
-      files: ['App.tsx', 'main.tsx', 'index.css'],
-      directories: ['components', 'hooks', 'types', 'stories']
-    }
+  private mockData: ApiDirectoryTree = {
+    path: '/mock',
+    files: ['README.md', 'Cargo.toml', 'input.md', 'test_hierarchy.md'],
+    subdirectories: [
+      {
+        path: '/mock/src',
+        files: ['main.rs', 'lib.rs', 'parser.rs', 'server.rs'],
+        subdirectories: []
+      },
+      {
+        path: '/mock/frontend',
+        files: ['package.json', 'vite.config.ts', 'tsconfig.json'],
+        subdirectories: [
+          {
+            path: '/mock/frontend/src',
+            files: ['App.tsx', 'main.tsx', 'index.css'],
+            subdirectories: []
+          }
+        ]
+      }
+    ]
   };
 
   private mockFileContent: Record<string, string> = {
@@ -222,8 +231,7 @@ Processes input data and returns results.`
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 200));
 
-    const data = this.mockData[path] || { files: [], directories: [] };
-    return { data };
+    return { data: this.mockData };
   }
 
   async getFileContent(filePath: string): Promise<ApiResponse<ApiFileContent>> {

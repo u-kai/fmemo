@@ -138,18 +138,9 @@ pub fn create_api_routes(
             .map(move || {
                 match scan_directory(&root_dir) {
                     Ok(tree) => {
-                        // Transform to frontend expected format
-                        let response = serde_json::json!({
-                            "files": tree.files,
-                            "directories": tree.subdirectories.iter().map(|subdir| {
-                                std::path::Path::new(&subdir.path)
-                                    .file_name()
-                                    .and_then(|name| name.to_str())
-                                    .unwrap_or(&subdir.path)
-                            }).collect::<Vec<_>>()
-                        });
+                        // Return full hierarchical structure
                         warp::reply::with_status(
-                            warp::reply::json(&response),
+                            warp::reply::json(&tree),
                             warp::http::StatusCode::OK,
                         )
                     }
