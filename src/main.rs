@@ -131,38 +131,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  WebSocket /ws - Real-time updates");
 
             warp::serve(routes).run(([127, 0, 0, 1], port)).await;
-            return Ok(());
         }
 
         // Try to auto-detect frontend directory
-        let auto_frontend = PathBuf::from("frontend/dist");
-        if auto_frontend.exists() && auto_frontend.is_dir() {
-            println!("Auto-detected frontend directory: {}", auto_frontend.display());
-            let routes = create_full_routes(root_dir.clone(), auto_frontend, clients);
-            let routes = routes.with(warp::log("fmemo"));
+        #[cfg(not(feature = "embed_frontend"))]
+        {
+            let auto_frontend = PathBuf::from("frontend/dist");
+            if auto_frontend.exists() && auto_frontend.is_dir() {
+                println!("Auto-detected frontend directory: {}", auto_frontend.display());
+                let routes = create_full_routes(root_dir.clone(), auto_frontend, clients);
+                let routes = routes.with(warp::log("fmemo"));
 
-            println!("Root directory: {}", root_dir.display());
-            println!("Server running on http://localhost:{}", port);
-            println!("Frontend available at: http://localhost:{}/", port);
-            println!("API endpoints:");
-            println!("  GET /api/root - Get directory tree");
-            println!("  GET /api/files/{{filename}} - Get file content");
-            println!("  WebSocket /ws - Real-time updates");
-            
-            warp::serve(routes).run(([127, 0, 0, 1], port)).await;
-        } else {
-            println!("No frontend directory found, starting API-only server...");
-            let routes = create_api_only_routes(root_dir.clone(), clients);
-            let routes = routes.with(warp::log("fmemo"));
+                println!("Root directory: {}", root_dir.display());
+                println!("Server running on http://localhost:{}", port);
+                println!("Frontend available at: http://localhost:{}/", port);
+                println!("API endpoints:");
+                println!("  GET /api/root - Get directory tree");
+                println!("  GET /api/files/{{filename}} - Get file content");
+                println!("  WebSocket /ws - Real-time updates");
 
-            println!("Root directory: {}", root_dir.display());
-            println!("Server running on http://localhost:{}", port);
-            println!("API endpoints:");
-            println!("  GET /api/root - Get directory tree");
-            println!("  GET /api/files/{{filename}} - Get file content");
-            println!("  WebSocket /ws - Real-time updates");
-            
-            warp::serve(routes).run(([127, 0, 0, 1], port)).await;
+                warp::serve(routes).run(([127, 0, 0, 1], port)).await;
+            } else {
+                println!("No frontend directory found, starting API-only server...");
+                let routes = create_api_only_routes(root_dir.clone(), clients);
+                let routes = routes.with(warp::log("fmemo"));
+
+                println!("Root directory: {}", root_dir.display());
+                println!("Server running on http://localhost:{}", port);
+                println!("API endpoints:");
+                println!("  GET /api/root - Get directory tree");
+                println!("  GET /api/files/{{filename}} - Get file content");
+                println!("  WebSocket /ws - Real-time updates");
+
+                warp::serve(routes).run(([127, 0, 0, 1], port)).await;
+            }
         }
     }
 

@@ -1,12 +1,20 @@
 SHELL := /bin/bash
 
+# Source cargo environment if available
+ifneq (,$(wildcard ~/.cargo/env))
+    CARGO_ENV := . ~/.cargo/env &&
+else
+    CARGO_ENV :=
+endif
+
 # Configurable vars
 ROOT ?= .
 PORT ?= 3030
 BIN  ?= target/release/fmemo
 FEATURES ?= embed_frontend
+INSTALL_DIR ?= /usr/local/bin
 
-.PHONY: all install-frontend build-frontend build package run serve start-bg stop verify verify-api verify-ui clean
+.PHONY: all install-frontend build-frontend build package run serve start-bg stop verify verify-api verify-ui install uninstall clean
 
 all: package
 
@@ -18,10 +26,10 @@ build-frontend: install-frontend
 
 # Build Rust binary with embedded frontend
 package: build-frontend
-	cargo build --release --features $(FEATURES)
+	$(CARGO_ENV) cargo build --release --features $(FEATURES)
 
 build:
-	cargo build --release --features $(FEATURES)
+	$(CARGO_ENV) cargo build --release --features $(FEATURES)
 
 run: package
 	$(BIN) -r $(ROOT) -p $(PORT)
@@ -63,8 +71,18 @@ verify: start-bg
 	@$(MAKE) stop || true
 	@echo "All checks passed."
 
+install: build
+	@echo "Installing fmemo to $(INSTALL_DIR)..."
+	@install -m 755 $(BIN) $(INSTALL_DIR)/fmemo
+	@echo "Installation complete. You can now run 'fmemo' from anywhere."
+
+uninstall:
+	@echo "Removing fmemo from $(INSTALL_DIR)..."
+	@rm -f $(INSTALL_DIR)/fmemo
+	@echo "Uninstall complete."
+
 clean:
-	cargo clean
+	$(CARGO_ENV) cargo clean
 	rm -f server.pid server.log
 	rm -rf frontend/node_modules frontend/dist
 
