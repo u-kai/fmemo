@@ -65,14 +65,122 @@ fn helper_function() {
 |
 |======================================
 
-## Makefile Usage (Single Binary)
+## Installation
 
-- Build frontend, embed into Rust binary, run and verify
-  - `make package` — build frontend (`frontend/dist`) and Rust release binary with `embed_frontend`
-  - `make run ROOT=. PORT=3030` — run the binary serving embedded SPA + API/WS
-  - `make verify ROOT=. PORT=3030` — start in background, check `/api/root` and `/` (index.html), then stop
+### Building from Source
 
-- Notes
-  - First time only: Node.js required to build frontend assets
-  - After packaging, runtime does not require Node; `./target/release/fmemo -r <root>` works standalone
-  - You can also pass `--frontend ./frontend/dist` to serve from disk without embedding
+```bash
+# Build single binary with embedded frontend
+make build
+
+# Install to /usr/local/bin (requires sudo)
+sudo make install
+
+# Now you can run fmemo from anywhere
+fmemo -r ~/my-memos -p 3030
+```
+
+### Uninstall
+
+```bash
+sudo make uninstall
+```
+
+## Usage
+
+### Basic Usage
+
+```bash
+# Start server with default settings (current directory, port 3030)
+fmemo
+
+# Specify custom directory and port
+fmemo -r ~/my-memos -p 8080
+
+# Development mode (API only, for use with separate frontend dev server)
+fmemo --dev
+
+# API only mode (no frontend hosting)
+fmemo --api-only
+```
+
+### Command Line Options
+
+```
+Options:
+  -r, --root <ROOT_DIR>          Root directory to serve .fmemo files from [default: .]
+  -p, --port <PORT>              Port to serve on [default: 3030]
+  -f, --frontend <FRONTEND_DIR>  Frontend dist directory (optional)
+      --api-only                 Run API server only, without frontend hosting
+      --dev                      Development mode - serve API only
+  -h, --help                     Print help
+  -V, --version                  Print version
+```
+
+### Makefile Targets
+
+```bash
+# Build single binary with embedded frontend
+make build
+
+# Build frontend and package into binary
+make package
+
+# Install to /usr/local/bin (default)
+sudo make install
+
+# Install to custom directory
+sudo make install INSTALL_DIR=/opt/bin
+
+# Uninstall
+sudo make uninstall
+
+# Run the server
+make run
+
+# Run tests and verify endpoints
+make verify
+
+# Clean build artifacts
+make clean
+```
+
+## Development
+
+### Prerequisites
+
+- Rust (latest stable)
+- Node.js and npm (for building frontend)
+
+### Build Steps
+
+1. **Build frontend** (first time only, requires Node.js):
+   ```bash
+   cd frontend && npm ci && npm run build
+   ```
+
+2. **Build Rust binary with embedded frontend**:
+   ```bash
+   cargo build --release --features embed_frontend
+   ```
+
+3. **Run**:
+   ```bash
+   ./target/release/fmemo -r . -p 3030
+   ```
+
+### Notes
+
+- **Single Binary**: After building with `embed_frontend` feature, the binary is completely standalone and doesn't require Node.js or frontend files at runtime
+- **Runtime Modes**:
+  - With `embed_frontend` feature: Serves embedded frontend from binary
+  - Without feature: Auto-detects `frontend/dist` directory or runs API-only
+  - With `--frontend` flag: Serves frontend from specified directory
+- **Development**: Use `--dev` flag to run API-only server while running frontend separately with `npm run dev`
+
+## API Endpoints
+
+- `GET /api/root` - Get directory tree of .fmemo files
+- `GET /api/files/{filename}` - Get file content
+- `GET /api/file/{filename}` - Get file content (frontend compatible)
+- `WebSocket /ws` - Real-time file system updates
