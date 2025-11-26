@@ -1,0 +1,25 @@
+# Main Application
+<desc>The Main application entry point</desc>
+
+This file contains the main application logic.
+
+```rust
+fn main() {
+    let app = App::new();
+    app.run();
+}
+```
+
+## Configuration
+
+### Server Config
+<desc>Configuration for the web server</desc>
+
+Server configuration options.
+
+```yaml
+server:
+  port: 3030
+  host: localhost
+```
+test change
