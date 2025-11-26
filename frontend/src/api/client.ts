@@ -39,8 +39,8 @@ export class ApiClient {
       const data = await response.json();
       return { data };
     } catch (error) {
-      return { 
-        data: { files: [], directories: [] },
+      return {
+        data: { path: '', files: [], subdirectories: [] },
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }

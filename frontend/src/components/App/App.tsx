@@ -122,6 +122,12 @@ export const App: React.FC = () => {
     console.log("[App] Directory selected:", dirPath);
     setSelectedFile(dirPath);
 
+    if (!directoryStructure) {
+      console.log("[App] Directory structure not loaded");
+      setMemos([]);
+      return;
+    }
+
     // Find the directory in the structure
     const findDirectory = (items: FileItem[], path: string): FileItem | null => {
       for (const item of items) {
