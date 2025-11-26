@@ -6,6 +6,7 @@ import './FileExplorer.css';
 interface FileExplorerProps {
   directoryStructure: DirectoryStructure;
   onFileSelect: (filePath: string) => void;
+  onDirectorySelect?: (dirPath: string) => void;
   selectedFile?: string;
   className?: string;
 }
@@ -13,6 +14,7 @@ interface FileExplorerProps {
 export const FileExplorer: React.FC<FileExplorerProps> = ({
   directoryStructure,
   onFileSelect,
+  onDirectorySelect,
   selectedFile,
   className = ''
 }) => {
@@ -30,6 +32,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
               key={`${item.path}-${index}`}
               item={item}
               onSelect={onFileSelect}
+              onDirectorySelect={onDirectorySelect}
               selectedPath={selectedFile}
               level={0}
             />

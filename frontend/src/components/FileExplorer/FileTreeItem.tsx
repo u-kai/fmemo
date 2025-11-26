@@ -4,6 +4,7 @@ import type { FileItem } from '../../types';
 interface FileTreeItemProps {
   item: FileItem;
   onSelect: (filePath: string) => void;
+  onDirectorySelect?: (dirPath: string) => void;
   selectedPath?: string;
   level: number;
 }
@@ -11,6 +12,7 @@ interface FileTreeItemProps {
 export const FileTreeItem: React.FC<FileTreeItemProps> = ({
   item,
   onSelect,
+  onDirectorySelect,
   selectedPath,
   level
 }) => {
@@ -23,8 +25,8 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
   const handleClick = () => {
     if (isDirectory) {
       setIsExpanded(!isExpanded);
-      if (hasChildren) {
-        onSelect(item.path);
+      if (onDirectorySelect) {
+        onDirectorySelect(item.path);
       }
     } else {
       onSelect(item.path);
@@ -89,6 +91,7 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
               key={`${child.path}-${index}`}
               item={child}
               onSelect={onSelect}
+              onDirectorySelect={onDirectorySelect}
               selectedPath={selectedPath}
               level={level + 1}
             />
