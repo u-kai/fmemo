@@ -7,7 +7,7 @@ import { useFileSystem } from "../../hooks/useFileSystem";
 import { useZoom } from "../../hooks/useZoom";
 import { useApi } from "../../hooks/useApi";
 import { useWebSocket } from "../../hooks/useWebSocket";
-import type { ViewMode, FunctionMemo } from "../../types";
+import type { ViewMode, FunctionMemo, FileItem } from "../../types";
 import "./App.css";
 
 export const App: React.FC = () => {
@@ -116,6 +116,73 @@ export const App: React.FC = () => {
       console.log("[App] File type not supported for memo display");
       setMemos([]);
     }
+  };
+
+  const handleDirectorySelect = async (dirPath: string) => {
+    console.log("[App] Directory selected:", dirPath);
+    setSelectedFile(dirPath);
+
+    if (!directoryStructure) {
+      console.log("[App] Directory structure not loaded");
+      setMemos([]);
+      return;
+    }
+
+    // Find the directory in the structure
+    const findDirectory = (items: FileItem[], path: string): FileItem | null => {
+      for (const item of items) {
+        if (item.path === path && item.type === 'directory') {
+          return item;
+        }
+        if (item.children) {
+          const found = findDirectory(item.children, path);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const directory = findDirectory(directoryStructure.items, dirPath);
+    if (!directory) {
+      console.log("[App] Directory not found:", dirPath);
+      setMemos([]);
+      return;
+    }
+
+    // Recursively collect all files
+    const collectFiles = (items: FileItem[]): string[] => {
+      const files: string[] = [];
+      for (const item of items) {
+        if (item.type === 'file' && (
+          item.path.endsWith(".md") ||
+          item.path.endsWith(".fmemo") ||
+          item.path.endsWith(".rs")
+        )) {
+          files.push(item.path);
+        }
+        if (item.children) {
+          files.push(...collectFiles(item.children));
+        }
+      }
+      return files;
+    };
+
+    const files = collectFiles(directory.children || []);
+    console.log("[App] Files in directory:", files);
+
+    // Fetch all files and combine their memos
+    const allMemos: FunctionMemo[] = [];
+    for (const filePath of files) {
+      console.log("[App] Fetching content for:", filePath);
+      const fetchedMemos = await fetchFileContent(filePath);
+      if (fetchedMemos && fetchedMemos.length > 0) {
+        // Add fetched memos directly without wrapper
+        allMemos.push(...fetchedMemos);
+      }
+    }
+
+    console.log("[App] Combined memos from directory:", allMemos.length, "files");
+    setMemos(allMemos);
   };
 
   const handleModeChange = (mode: "memo" | "flow") => {
@@ -302,6 +369,7 @@ export const App: React.FC = () => {
         <FileExplorer
           directoryStructure={directoryStructure}
           onFileSelect={handleFileSelect}
+          onDirectorySelect={handleDirectorySelect}
           selectedFile={selectedFile}
         />
       </div>

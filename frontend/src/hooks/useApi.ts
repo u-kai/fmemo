@@ -20,7 +20,7 @@ export const useApi = () => {
         return null;
       }
       
-      return apiClient.convertToDirectoryStructure(response.data, path || '/Users/kai/refactor-fmemo');
+      return apiClient.convertToDirectoryStructure(response.data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);

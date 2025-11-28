@@ -71,7 +71,7 @@ verify: start-bg
 	@$(MAKE) stop || true
 	@echo "All checks passed."
 
-install: build
+install: package
 	@echo "Installing fmemo to $(INSTALL_DIR)..."
 	@install -m 755 $(BIN) $(INSTALL_DIR)/fmemo
 	@echo "Installation complete. You can now run 'fmemo' from anywhere."

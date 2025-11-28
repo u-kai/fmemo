@@ -39,7 +39,7 @@ pub fn scan_directory<P: AsRef<Path>>(root_path: P) -> std::io::Result<Directory
 
         if path.is_file() {
             if let Some(ext) = path.extension() {
-                if ext == "fmemo" {
+                if ext == "fmemo" || ext == "md" {
                     if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
                         files.push(file_name.to_string());
                     }
@@ -75,11 +75,12 @@ fn has_fmemo_files(tree: &DirectoryTree) -> bool {
 pub fn read_fmemo_file<P: AsRef<Path>>(file_path: P) -> std::io::Result<FileContent> {
     let file_path = file_path.as_ref();
     
-    // Verify it's a .fmemo file
-    if file_path.extension().and_then(|s| s.to_str()) != Some("fmemo") {
+    // Verify it's a .fmemo or .md file
+    let ext = file_path.extension().and_then(|s| s.to_str());
+    if ext != Some("fmemo") && ext != Some("md") {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "File must have .fmemo extension",
+            "File must have .fmemo or .md extension",
         ));
     }
 
@@ -138,18 +139,9 @@ pub fn create_api_routes(
             .map(move || {
                 match scan_directory(&root_dir) {
                     Ok(tree) => {
-                        // Transform to frontend expected format
-                        let response = serde_json::json!({
-                            "files": tree.files,
-                            "directories": tree.subdirectories.iter().map(|subdir| {
-                                std::path::Path::new(&subdir.path)
-                                    .file_name()
-                                    .and_then(|name| name.to_str())
-                                    .unwrap_or(&subdir.path)
-                            }).collect::<Vec<_>>()
-                        });
+                        // Return full hierarchical structure
                         warp::reply::with_status(
-                            warp::reply::json(&response),
+                            warp::reply::json(&tree),
                             warp::http::StatusCode::OK,
                         )
                     }
@@ -180,7 +172,7 @@ pub fn create_api_routes(
                     Err(e) => {
                         let error_msg = match e.kind() {
                             std::io::ErrorKind::NotFound => "File not found",
-                            std::io::ErrorKind::InvalidInput => "Invalid file type (must be .fmemo)",
+                            std::io::ErrorKind::InvalidInput => "Invalid file type (must be .fmemo or .md)",
                             _ => "Failed to read file",
                         };
                         warp::reply::with_status(
@@ -201,7 +193,8 @@ pub fn create_api_routes(
             .and(warp::path::tail())
             .and(warp::get())
             .map(move |tail: warp::path::Tail| {
-                let filename = tail.as_str();
+                // Simple URL decode for %2F -> /
+                let filename = tail.as_str().replace("%2F", "/").replace("%2f", "/");
                 let file_path = root_dir.join(&filename);
 
                 match read_fmemo_file(&file_path) {
@@ -220,7 +213,7 @@ pub fn create_api_routes(
                     Err(e) => {
                         let error_msg = match e.kind() {
                             std::io::ErrorKind::NotFound => "File not found",
-                            std::io::ErrorKind::InvalidInput => "Invalid file type (must be .fmemo)",
+                            std::io::ErrorKind::InvalidInput => "Invalid file type (must be .fmemo or .md)",
                             _ => "Failed to read file",
                         };
                         warp::reply::with_status(
@@ -474,9 +467,10 @@ pub fn start_directory_watcher<P: AsRef<Path>>(
                     let now = std::time::SystemTime::now();
                     let mut processed_files = HashSet::new();
                     
-                    // Check if any changed file is a .fmemo file
+                    // Check if any changed file is a .fmemo or .md file
                     for path in &event.paths {
-                        if path.extension().and_then(|s| s.to_str()) == Some("fmemo") && 
+                        let ext = path.extension().and_then(|s| s.to_str());
+                        if (ext == Some("fmemo") || ext == Some("md")) && 
                            processed_files.insert(path.clone()) {
                             
                             // Check if we processed this file recently (within 2 seconds)

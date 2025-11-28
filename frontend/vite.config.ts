@@ -16,13 +16,13 @@ export default defineConfig({
     proxy: {
       // Proxy API calls to Rust backend
       '/api': {
-        target: 'http://localhost:3030',
+        target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false
       },
       // Proxy WebSocket connections
       '/ws': {
-        target: 'ws://localhost:3030',
+        target: 'ws://localhost:3001',
         ws: true,
         changeOrigin: true
       }
