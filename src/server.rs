@@ -192,7 +192,8 @@ pub fn create_api_routes(
             .and(warp::path::tail())
             .and(warp::get())
             .map(move |tail: warp::path::Tail| {
-                let filename = tail.as_str();
+                // Simple URL decode for %2F -> /
+                let filename = tail.as_str().replace("%2F", "/").replace("%2f", "/");
                 let file_path = root_dir.join(&filename);
 
                 match read_fmemo_file(&file_path) {

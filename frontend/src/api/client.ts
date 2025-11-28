@@ -48,16 +48,25 @@ export class ApiClient {
 
   async getFileContent(filePath: string): Promise<ApiResponse<ApiFileContent>> {
     try {
-      // Compute path relative to root if possible (server expects path relative to configured root)
+      // Compute path relative to root (server expects path relative to configured root)
       let relativePath = filePath;
+      
+      // If we have a lastRootPath (from directory structure) and the filePath starts with it,
+      // convert absolute path to relative path
       if (this.lastRootPath && filePath.startsWith(this.lastRootPath)) {
         relativePath = filePath.slice(this.lastRootPath.length);
-        if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
+        // Remove leading slash if present
+        if (relativePath.startsWith('/')) {
+          relativePath = relativePath.slice(1);
+        }
       } else {
-        // Fallback to basename
-        relativePath = filePath.includes('/') ? (filePath.split('/').pop() || filePath) : filePath;
+        // Remove leading './' if present 
+        if (relativePath.startsWith('./')) {
+          relativePath = relativePath.slice(2);
+        }
       }
-      console.log(`[ApiClient] Calling API with path: ${relativePath} (from: ${filePath})`);
+      
+      console.log(`[ApiClient] Calling API with path: ${relativePath} (from: ${filePath}, lastRootPath: ${this.lastRootPath})`);
       
       const response = await fetch(`${this.baseUrl}/api/file/${encodeURIComponent(relativePath)}`);
       
@@ -122,8 +131,10 @@ export class ApiClient {
   ): DirectoryStructure {
     // Use path from API data, or provided currentPath
     const path = currentPath || apiData.path;
-    // Remember last root/current path for relative file path computation
-    this.lastRootPath = path;
+    // Remember root path for relative file path computation (only set once for the root call)
+    if (!currentPath) {
+      this.lastRootPath = apiData.path;
+    }
     const items: FileItem[] = [];
 
     // Add subdirectories (recursively)
