@@ -176,15 +176,8 @@ export const App: React.FC = () => {
       console.log("[App] Fetching content for:", filePath);
       const fetchedMemos = await fetchFileContent(filePath);
       if (fetchedMemos && fetchedMemos.length > 0) {
-        // Add file path as a top-level memo
-        allMemos.push({
-          level: 1,
-          title: `📄 ${filePath}`,
-          description: '',
-          content: '',
-          codeBlocks: [],
-          children: fetchedMemos
-        });
+        // Add fetched memos directly without wrapper
+        allMemos.push(...fetchedMemos);
       }
     }
 
