@@ -67,8 +67,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let clients: WebSocketClients = Arc::new(Mutex::new(Vec::new()));
 
     // Start directory watcher for real-time updates
-    if let Err(e) = start_directory_watcher(&root_dir, clients.clone()) {
-        eprintln!("Warning: Failed to start directory watcher: {}", e);
+    println!("Starting directory watcher for: {}", root_dir.display());
+    match start_directory_watcher(&root_dir, clients.clone()) {
+        Ok(_) => println!("✅ Directory watcher started successfully"),
+        Err(e) => {
+            eprintln!("❌ Failed to start directory watcher: {}", e);
+            eprintln!("File watching will be disabled");
+        }
     }
 
     // Create routes based on configuration

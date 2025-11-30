@@ -14,11 +14,16 @@ const defaultWsUrl = (() => {
   // Allow override via env
   const envUrl = (import.meta as any)?.env?.VITE_WS_URL as string | undefined;
   if (envUrl) return envUrl;
-  // In dev, default to backend port 3030
-  if ((import.meta as any)?.env?.DEV) return 'ws://localhost:3030/ws';
+  
+  // In dev, use Vite's dev server proxy (which forwards to backend)
+  if ((import.meta as any)?.env?.DEV && typeof window !== 'undefined') {
+    return `ws://${window.location.host}/ws`;
+  }
+  // Fallback to direct backend connection
+  if ((import.meta as any)?.env?.DEV) return 'ws://localhost:8080/ws';
   // In production (served by the same server), use current host
   if (typeof window !== 'undefined') return `ws://${window.location.host}/ws`;
-  return 'ws://localhost:3030/ws';
+  return 'ws://localhost:8080/ws';
 })();
 
 export const useWebSocket = (url: string = defaultWsUrl) => {
@@ -33,10 +38,15 @@ export const useWebSocket = (url: string = defaultWsUrl) => {
 
   const connect = useCallback(() => {
     try {
+      console.log('🔄 Attempting WebSocket connection to:', url);
+      console.log('🌐 Current environment:', {
+        isDev: (import.meta as any)?.env?.DEV,
+        host: typeof window !== 'undefined' ? window.location.host : 'N/A'
+      });
       ws.current = new WebSocket(url);
       
       ws.current.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('✅ WebSocket connected successfully to:', url);
         setIsConnected(true);
         setError(null);
         reconnectAttempts.current = 0;
@@ -104,13 +114,15 @@ export const useWebSocket = (url: string = defaultWsUrl) => {
   }, []);
 
   useEffect(() => {
+    console.log('🚀 WebSocket hook initializing...');
     connect();
     
     return () => {
       console.log('useWebSocket cleanup - disconnecting');
       disconnect();
     };
-  }, []);
+  }, []); // 空の依存関係配列で初回のみ実行
+
 
   return {
     isConnected,

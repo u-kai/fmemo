@@ -17,14 +17,7 @@ export const MemoContainer: React.FC<MemoContainerProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
-  console.log('[MemoContainer] Rendering memo:', { 
-    title: memo.title, 
-    level: memo.level, 
-    hasCodeBlocks: !!memo.codeBlocks, 
-    codeBlocksLength: memo.codeBlocks?.length || 0,
-    hasChildren: !!memo.children,
-    childrenLength: memo.children?.length || 0
-  });
+  // Debug logs removed to prevent infinite re-renders
   
   const handleToggle = () => {
     const newExpanded = !isExpanded;

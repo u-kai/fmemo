@@ -186,6 +186,17 @@ pub fn create_api_routes(
 
     // Add compatibility route for frontend API client
     // Support nested paths for files (e.g., sub/dir/file.fmemo)
+    // Debug endpoint to check WebSocket client count
+    let debug_route = warp::path!("api" / "debug" / "websocket")
+        .and(warp::get())
+        .map(move || {
+            // This will be replaced with actual client count in broadcast function
+            warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({"clients": "check server logs"})),
+                warp::http::StatusCode::OK,
+            )
+        });
+
     let file_route = {
         let root_dir = root_dir.clone();
         warp::path("api")
@@ -233,6 +244,7 @@ pub fn create_api_routes(
 
     root_route
         .or(files_route)
+        .or(debug_route)
         .or(file_route)
         .with(cors)
 }
@@ -349,14 +361,21 @@ async fn handle_websocket_connection(
     websocket: warp::ws::WebSocket,
     clients: WebSocketClients,
 ) {
+    println!("🌐 New WebSocket connection established");
     let (mut ws_tx, mut ws_rx) = websocket.split();
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-    clients.lock().unwrap().push(tx);
+    {
+        let mut clients_guard = clients.lock().unwrap();
+        clients_guard.push(tx);
+        println!("📊 Total WebSocket clients: {}", clients_guard.len());
+    }
 
+    let clients_for_cleanup = clients.clone();
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if ws_tx.send(msg).await.is_err() {
+                println!("❌ Failed to send WebSocket message");
                 break;
             }
         }
@@ -364,22 +383,39 @@ async fn handle_websocket_connection(
 
     let recv_task = tokio::spawn(async move {
         while let Some(result) = ws_rx.next().await {
-            if result.is_err() {
-                break;
+            match result {
+                Ok(msg) => {
+                    println!("📨 Received WebSocket message: {:?}", msg);
+                }
+                Err(e) => {
+                    println!("❌ WebSocket receive error: {:?}", e);
+                    break;
+                }
             }
         }
     });
 
     tokio::select! {
-        _ = send_task => {},
-        _ = recv_task => {},
+        _ = send_task => {
+            println!("🔚 WebSocket send task ended");
+        },
+        _ = recv_task => {
+            println!("🔚 WebSocket receive task ended");
+        },
     }
+    
+    println!("🚪 WebSocket connection closed");
 }
 
 /// Broadcast message to all WebSocket clients
 pub fn broadcast_to_clients(clients: &WebSocketClients, message: serde_json::Value) {
     let clients_lock = clients.lock().unwrap();
     let message_text = message.to_string();
+    
+    println!("🔢 Broadcasting to {} WebSocket clients", clients_lock.len());
+    if clients_lock.is_empty() {
+        println!("⚠️  No WebSocket clients connected - message not delivered");
+    }
     
     clients_lock.iter().for_each(|client| {
         let _ = client.send(warp::ws::Message::text(message_text.clone()));
@@ -456,20 +492,35 @@ pub fn start_directory_watcher<P: AsRef<Path>>(
                     use std::collections::HashSet;
                     use notify::EventKind;
                     
+                    println!("📁 Directory watcher event: {:?} for paths: {:?}", event.kind, event.paths);
+                    
                     // Only process actual file content changes
                     if !matches!(event.kind, 
                         EventKind::Modify(notify::event::ModifyKind::Data(_)) | 
                         EventKind::Create(_)
                     ) {
+                        println!("⏩ Skipping event - not a data modification or creation");
                         continue;
                     }
                     
                     let now = std::time::SystemTime::now();
                     let mut processed_files = HashSet::new();
                     
-                    // Check if any changed file is a .fmemo or .md file
+                    // Check if any changed file is a .fmemo or .md file (excluding node_modules)
                     for path in &event.paths {
+                        // Skip node_modules and hidden files (starting with .)
+                        let path_str = path.to_string_lossy();
+                        let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                        
+                        if path_str.contains("node_modules") ||
+                           path_str.contains("target/") ||
+                           file_name.starts_with('.') {
+                            println!("⏭️ Skipping excluded path: {}", path.display());
+                            continue;
+                        }
+                        
                         let ext = path.extension().and_then(|s| s.to_str());
+                        println!("🔍 Checking file: {} (ext: {:?})", path.display(), ext);
                         if (ext == Some("fmemo") || ext == Some("md")) && 
                            processed_files.insert(path.clone()) {
                             
@@ -487,8 +538,10 @@ pub fn start_directory_watcher<P: AsRef<Path>>(
                             last_processed.insert(path.clone(), now);
                             
                             // Send individual file update message
+                            println!("💾 Reading file content for: {}", path.display());
                             if let Ok(content) = fs::read_to_string(path) {
                                 let memos = parse_memo(&content);
+                                println!("📝 Parsed {} memos from file", memos.len());
                                 
                                 let file_update_msg = serde_json::json!({
                                     "type": "file_updated",
@@ -497,8 +550,11 @@ pub fn start_directory_watcher<P: AsRef<Path>>(
                                     "memos": memos
                                 });
                                 
+                                println!("📡 Broadcasting WebSocket message: {}", file_update_msg);
                                 broadcast_to_clients(&clients, file_update_msg);
-                                println!("Sent file update for: {}", path.display());
+                                println!("✅ Sent file update for: {}", path.display());
+                            } else {
+                                println!("❌ Failed to read file: {}", path.display());
                             }
                         }
                     }

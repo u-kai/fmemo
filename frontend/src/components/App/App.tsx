@@ -23,23 +23,25 @@ export const App: React.FC = () => {
   }, [viewMode]);
   const [memos, setMemos] = useState<FunctionMemo[]>([]);
   const [controlsCollapsed, setControlsCollapsed] = useState<boolean>(false);
-  const lastProcessedMessageRef = useRef<any>(null);
 
   const { directoryStructure, loading, refreshDirectory } = useFileSystem();
   const { fetchFileContent, refreshFileContent, invalidateCache } = useApi();
-  const { isConnected, lastMessage, error: wsError } = useWebSocket();
+  const { isConnected, lastMessage, error: wsError, sendMessage } = useWebSocket();
+  // Simple polling for real-time updates
+  const [lastFileHash, setLastFileHash] = useState<string>("");
+
+  // Debug WebSocket state changes
+  useEffect(() => {
+    console.log('[App] WebSocket state changed:', { isConnected, wsError });
+  }, [isConnected, wsError]);
+
+  useEffect(() => {
+    if (lastMessage) {
+      console.log('[App] New WebSocket message:', lastMessage);
+    }
+  }, [lastMessage]);
   
-  // Debug logging
-  console.log('[App] Current state:', {
-    selectedFile,
-    viewMode,
-    viewModeMode: viewMode.mode,
-    viewModeLayout: viewMode.layout,
-    memosCount: memos.length,
-    isConnected,
-    lastMessage,
-    wsError
-  });
+  // Debug logging removed to prevent infinite re-renders
   const { zoomState, zoomIn, zoomOut, resetZoom, fitToScreen, zoomAtPoint } = useZoom();
 
   // Mouse wheel zoom (Ctrl+scroll) and keyboard shortcuts
@@ -276,12 +278,18 @@ export const App: React.FC = () => {
 
   // Handle WebSocket messages for real-time updates
   const handleWebSocketMessage = useCallback(() => {
-    if (!lastMessage || lastMessage === lastProcessedMessageRef.current) {
+    if (!lastMessage) {
       return;
     }
     
-    lastProcessedMessageRef.current = lastMessage;
-    console.log("Processing WebSocket message:", lastMessage);
+    // EMERGENCY FIX: Skip directory_updated messages to prevent infinite loops
+    if (lastMessage.type === 'directory_updated') {
+      console.log("[App] Skipping directory_updated to prevent loops");
+      return;
+    }
+    
+    console.log("[App] Processing WebSocket message:", lastMessage.type);
+    console.log("[App] Current selectedFile:", selectedFile);
 
     switch (lastMessage.type) {
       case "reload":
@@ -290,69 +298,67 @@ export const App: React.FC = () => {
         refreshDirectory();
         if (selectedFile) {
           // Always reload file content for reload messages
-          handleFileSelect(selectedFile);
+          // Use direct API call instead of handleFileSelect to avoid circular dependency
+          refreshFileContent(selectedFile).then((updatedMemos) => {
+            if (updatedMemos) {
+              setMemos(updatedMemos);
+            }
+          });
         }
         break;
 
-      case "directory_updated":
-        // Directory structure changed, refresh file explorer
-        console.log("Directory updated, refreshing file explorer...");
-        refreshDirectory();
-        break;
 
       case "file_updated":
       case "update":
-        const updatedFilePath = lastMessage.file_path;
-        const updatedPath = lastMessage.path;
-
-        if (updatedFilePath && selectedFile) {
-          console.log(
-            `File updated: ${updatedFilePath} (filename: ${updatedPath})`,
-          );
-
-          // Check both full path and filename match
-          const normalizedSelected = selectedFile.replace(/^\.\//, "");
-          const normalizedUpdatedPath = updatedFilePath.replace(/^\.\//, "");
-          const selectedFilename = normalizedSelected.split("/").pop() || "";
-
-          const isCurrentFile =
-            normalizedSelected === normalizedUpdatedPath ||
-            selectedFilename === updatedPath ||
-            normalizedSelected.endsWith(updatedFilePath);
-
-          if (isCurrentFile) {
-            console.log("Refreshing currently selected file content");
-
-            // Always prefer WebSocket memos if available
-            if (lastMessage.memos !== undefined) {
-              console.log(
-                "Using memos from WebSocket message:",
-                lastMessage.memos,
-              );
-              setMemos(lastMessage.memos);
-            } else {
-              // Only fetch from API if no memos provided
-              refreshFileContent(selectedFile).then((updatedMemos) => {
-                if (updatedMemos) {
-                  setMemos(updatedMemos);
-                }
-              });
+        console.log("[App] File update detected");
+        
+        // SIMPLE APPROACH: Always refresh current file content when any file is updated
+        if (selectedFile) {
+          console.log("[App] Force refreshing current file:", selectedFile);
+          refreshFileContent(selectedFile).then((updatedMemos) => {
+            if (updatedMemos) {
+              console.log("[App] Successfully updated memos:", updatedMemos.length, "items");
+              setMemos(updatedMemos);
             }
-          } else {
-            // Invalidate cache for the updated file
-            invalidateCache(updatedFilePath);
-          }
+          });
         }
         break;
 
       default:
         console.log("Unknown WebSocket message type:", lastMessage.type);
     }
-  }, [lastMessage, selectedFile, refreshDirectory, refreshFileContent, invalidateCache, handleFileSelect]);
+  }, [lastMessage, selectedFile, refreshDirectory, refreshFileContent, invalidateCache]);
 
+  // Simple WebSocket message processing - no duplicate checking
   useEffect(() => {
+    console.log("[App] useEffect triggered, lastMessage:", lastMessage?.type || 'null');
     handleWebSocketMessage();
   }, [handleWebSocketMessage]);
+
+  // SMART POLLING: Only update UI when content actually changes
+  useEffect(() => {
+    if (!selectedFile) return;
+
+    const interval = setInterval(() => {
+      console.log("[App] Polling for changes:", selectedFile);
+      refreshFileContent(selectedFile).then((updatedMemos) => {
+        if (updatedMemos && updatedMemos.length > 0) {
+          // Create a hash of the content to detect changes
+          const contentHash = JSON.stringify(updatedMemos.map(m => m.title + m.content));
+          
+          if (contentHash !== lastFileHash) {
+            console.log("[App] Content changed, updating UI");
+            setMemos(updatedMemos);
+            setLastFileHash(contentHash);
+          } else {
+            console.log("[App] No changes detected, skipping UI update");
+          }
+        }
+      });
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [selectedFile, refreshFileContent, lastFileHash]);
 
 
   if (loading || !directoryStructure) {
