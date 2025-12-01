@@ -1,11 +1,14 @@
 use clap::{Arg, Command};
-use fmemo::server::{create_full_routes, create_api_only_routes, start_directory_watcher, WebSocketClients};
+use fmemo::server::{
+    WebSocketClients, create_api_only_routes, create_full_routes, start_directory_watcher,
+};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use warp::Filter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("login feature");
     let matches = Command::new("fmemo")
         .version("0.1.0")
         .about("Real-time Markdown memo server with React frontend")
@@ -42,7 +45,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .arg(
             Arg::new("dev")
                 .long("dev")
-                .help("Development mode - serve API only, frontend runs separately on different port")
+                .help(
+                    "Development mode - serve API only, frontend runs separately on different port",
+                )
                 .action(clap::ArgAction::SetTrue),
         )
         .get_matches();
@@ -59,7 +64,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Validate root directory
     if !root_dir.exists() || !root_dir.is_dir() {
-        eprintln!("Error: Root directory '{}' does not exist or is not a directory", root_dir.display());
+        eprintln!(
+            "Error: Root directory '{}' does not exist or is not a directory",
+            root_dir.display()
+        );
         std::process::exit(1);
     }
 
@@ -73,7 +81,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create routes based on configuration
     if api_only || dev_mode {
-        let mode_str = if dev_mode { "development API" } else { "API-only" };
+        let mode_str = if dev_mode {
+            "development API"
+        } else {
+            "API-only"
+        };
         println!("Starting {} server...", mode_str);
         let routes = create_api_only_routes(root_dir.clone(), clients);
         let routes = routes.with(warp::log("fmemo"));
@@ -85,19 +97,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  GET /api/files/{{filename}} - Get file content");
         println!("  GET /api/file/{{filename}} - Get file content (frontend compatible)");
         println!("  WebSocket /ws - Real-time updates");
-        
+
         if dev_mode {
             println!("");
             println!("🔧 Development mode:");
             println!("   Run React dev server separately: cd frontend && npm run dev");
             println!("   React dev server will proxy API calls to this server");
-            println!("   Configure Vite proxy in vite.config.ts to point to localhost:{}", port);
+            println!(
+                "   Configure Vite proxy in vite.config.ts to point to localhost:{}",
+                port
+            );
         }
-        
+
         warp::serve(routes).run(([127, 0, 0, 1], port)).await;
     } else if let Some(frontend_path) = frontend_dir {
         if !frontend_path.exists() || !frontend_path.is_dir() {
-            eprintln!("Error: Frontend directory '{}' does not exist or is not a directory", frontend_path.display());
+            eprintln!(
+                "Error: Frontend directory '{}' does not exist or is not a directory",
+                frontend_path.display()
+            );
             std::process::exit(1);
         }
         println!("Starting server with React frontend...");
@@ -112,14 +130,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  GET /api/root - Get directory tree");
         println!("  GET /api/files/{{filename}} - Get file content");
         println!("  WebSocket /ws - Real-time updates");
-        
+
         warp::serve(routes).run(([127, 0, 0, 1], port)).await;
     } else {
         // If compiled with embedded frontend, serve it from the binary
         #[cfg(feature = "embed_frontend")]
         {
             println!("Serving embedded frontend (single binary mode)...");
-            let routes = fmemo::server::create_full_routes_embedded(root_dir.clone(), clients.clone());
+            let routes =
+                fmemo::server::create_full_routes_embedded(root_dir.clone(), clients.clone());
             let routes = routes.with(warp::log("fmemo"));
 
             println!("Root directory: {}", root_dir.display());
@@ -138,7 +157,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             let auto_frontend = PathBuf::from("frontend/dist");
             if auto_frontend.exists() && auto_frontend.is_dir() {
-                println!("Auto-detected frontend directory: {}", auto_frontend.display());
+                println!(
+                    "Auto-detected frontend directory: {}",
+                    auto_frontend.display()
+                );
                 let routes = create_full_routes(root_dir.clone(), auto_frontend, clients);
                 let routes = routes.with(warp::log("fmemo"));
 
